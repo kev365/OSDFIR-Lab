@@ -1,0 +1,93 @@
+{{- if and .Values.global.ingress.enabled .Values.global.ingress.gcp.staticIPV6Name }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-osdfir-ingress-ipv6
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "osdfir.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingressClassName: {{ .Values.global.ingress.className }}
+    {{- if .Values.global.ingress.gcp.managedCertificates }}
+    networking.gke.io/managed-certificates: {{ .Release.Name }}-osdfir-managed-ssl
+    {{- end }}
+    {{- if .Values.global.ingress.certManager }}
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/issuer: {{ .Release.Name }}-osdfir-letsencrypt-production
+    {{- end }}
+    {{- if (eq .Values.global.ingress.className "gce") }}
+    {{- if .Values.global.ingress.gcp.staticIPV6Name }}
+    kubernetes.io/ingress.global-static-ip-name: {{ .Values.global.ingress.gcp.staticIPV6Name }}
+    networking.gke.io/v1beta1.FrontendConfig: {{ .Release.Name }}-osdfir-frontend-config
+    {{- else }}
+    {{- fail "A valid .Values.global.ingress.gcp.staticIPV6Name entry is required when using the GCE Ingress" }}
+    {{- end }}
+    {{- end }}
+spec:
+  {{- if or .Values.global.ingress.selfSigned .Values.global.ingress.certManager }}
+  tls:
+    - hosts:
+         {{- if .Values.global.ingress.timesketchHost }}
+        - {{ .Values.global.ingress.timesketchHost | quote }}
+        {{- end }}
+        {{- if .Values.global.ingress.yetiHost }}
+        - {{ .Values.global.ingress.yetiHost | quote }}
+        {{- end }}
+        {{- if .Values.global.ingress.openRelikFrontendHost }}
+        - {{ .Values.global.ingress.openRelikFrontendHost | quote }}
+        {{- end }}
+        {{- if .Values.global.ingress.openRelikAPIHost }}
+        - {{ .Values.global.ingress.openRelikAPIHost | quote }}
+        {{- end }}
+      secretName: {{ .Release.Name }}-osdfir-tls
+  {{- end }}
+  rules:
+    {{- if .Values.global.ingress.timesketchHost }}
+    - host: {{ .Values.global.ingress.timesketchHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-timesketch-nginx
+                port:
+                  number: 8080
+    {{- end }}
+    {{- if .Values.global.ingress.yetiHost }}
+    - host: {{.Values.global.ingress.yetiHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-yeti
+                port:
+                  number: 9000
+    {{- end }}
+    {{- if .Values.global.ingress.openRelikFrontendHost }}
+    - host: {{.Values.global.ingress.openRelikFrontendHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-openrelik
+                port:
+                  number: 8711
+    {{- end }}
+    {{- if .Values.global.ingress.openRelikAPIHost }}
+    - host: {{.Values.global.ingress.openRelikAPIHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-openrelik-api
+                port:
+                  number: 8710
+    {{- end }}
+{{- end }}

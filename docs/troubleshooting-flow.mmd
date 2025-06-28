@@ -1,0 +1,126 @@
+flowchart TD
+    A[OSDFIR Issue Detected] --> B{What Type<br/>of Issue?}
+    
+    %% Deployment Issues
+    B --> C[Deployment Issues]
+    C --> C1{Pods Not<br/>Starting?}
+    C1 -->|Yes| C2[kubectl get pods -n osdfir]
+    C2 --> C3{Pod Status?}
+    C3 --> C4[Pending]
+    C3 --> C5[ImagePullBackOff]
+    C3 --> C6[CrashLoopBackOff]
+    C3 --> C7[Error]
+    
+    %% Pending Pod Issues
+    C4 --> D1[Check PVC Status]
+    D1 --> D2[kubectl get pvc -n osdfir]
+    D2 --> D3{PVC Bound?}
+    D3 -->|No| D4[Check StorageClass<br/>kubectl get sc]
+    D4 --> D5[Verify Minikube<br/>Storage Provisioner]
+    D5 --> D6[minikube addons enable<br/>storage-provisioner]
+    D3 -->|Yes| D7[Check Node Resources]
+    D7 --> D8[kubectl describe nodes]
+    D8 --> D9[Increase Minikube Resources<br/>minikube stop<br/>minikube start --memory=10240]
+    
+    %% Image Pull Issues
+    C5 --> E1[Check Image Registry]
+    E1 --> E2{Registry<br/>Accessible?}
+    E2 -->|No| E3[Check Internet Connection<br/>and Firewall]
+    E3 --> E4[Test Registry Access:<br/>docker pull image]
+    E2 -->|Yes| E5[Check Image Tag Exists]
+    E5 --> E6[Verify Values File<br/>Image Names and Tags]
+    E6 --> E7[helm upgrade with<br/>corrected values]
+    
+    %% Crash Loop Issues
+    C6 --> F1[Check Pod Logs]
+    F1 --> F2[kubectl logs pod-name -n osdfir]
+    F2 --> F3{Error Type?}
+    F3 --> F4[Database Connection]
+    F3 --> F5[Missing Dependencies]
+    F3 --> F6[Resource Limits]
+    
+    F4 --> F7[Check Database Pod Status]
+    F7 --> F8[Restart Database Pods]
+    F5 --> F9[Check Init Containers]
+    F6 --> F10[Increase Resource Limits<br/>in Values File]
+    
+    %% Service Access Issues
+    B --> G[Service Access Issues]
+    G --> G1{Can't Access<br/>Web Interface?}
+    G1 -->|Yes| G2[Check Port Forward]
+    G2 --> G3[kubectl port-forward<br/>service/timesketch 9000:80]
+    G3 --> G4{Service<br/>Responding?}
+    G4 -->|No| G5[Check Service Status]
+    G5 --> G6[kubectl get svc -n osdfir]
+    G6 --> G7[Check Pod Labels<br/>and Selectors]
+    G4 -->|Yes| G8[Check Windows Firewall]
+    G8 --> G9[Allow Port in<br/>Windows Firewall]
+    
+    %% Performance Issues
+    B --> H[Performance Issues]
+    H --> H1{Slow Response<br/>Times?}
+    H1 -->|Yes| H2[Check Resource Usage]
+    H2 --> H3[kubectl top pods -n osdfir]
+    H3 --> H4{High CPU/Memory<br/>Usage?}
+    H4 -->|Yes| H5[Scale Resources]
+    H5 --> H6[Update values.yaml<br/>with higher limits]
+    H6 --> H7[helm upgrade]
+    H4 -->|No| H8[Check Storage Performance]
+    H8 --> H9[Monitor Disk I/O<br/>in Minikube VM]
+    
+    %% Data Issues
+    B --> I[Data Issues]
+    I --> I1{Data Not<br/>Persisting?}
+    I1 -->|Yes| I2[Check PVC Mount]
+    I2 --> I3[kubectl describe pod<br/>check volumes]
+    I3 --> I4{Volume<br/>Mounted?}
+    I4 -->|No| I5[Check PVC Name<br/>in Values File]
+    I5 --> I6[Verify osdfirvolume<br/>exists and is bound]
+    I4 -->|Yes| I7[Check File Permissions]
+    I7 --> I8[kubectl exec into pod<br/>check /data permissions]
+    
+    %% Windows-Specific Issues
+    B --> J[Windows-Specific Issues]
+    J --> J1{PowerShell<br/>Script Errors?}
+    J1 -->|Yes| J2[Check Execution Policy]
+    J2 --> J3[Set-ExecutionPolicy<br/>-ExecutionPolicy RemoteSigned]
+    J3 --> J4[Run scripts as<br/>Administrator]
+    J1 -->|No| J5{Docker Desktop<br/>Issues?}
+    J5 -->|Yes| J6[Restart Docker Desktop]
+    J6 --> J7[Check WSL2 Backend]
+    J7 --> J8[Reset Kubernetes<br/>in Docker Desktop]
+    
+    %% Resolution Steps
+    D6 --> K[Test Deployment]
+    D9 --> K
+    E7 --> K
+    F8 --> K
+    F9 --> K
+    F10 --> K
+    G9 --> K
+    H7 --> K
+    I6 --> K
+    I8 --> K
+    J4 --> K
+    J8 --> K
+    
+    K --> K1[helm upgrade osdfir-infra<br/>-f values.yaml]
+    K1 --> K2[Wait for Pods Ready]
+    K2 --> K3{Issue<br/>Resolved?}
+    K3 -->|Yes| L[Document Solution<br/>in notes.md]
+    K3 -->|No| M[Escalate Issue<br/>Check OSDFIR GitHub]
+    
+    %% Styling
+    classDef startEnd fill:#e1f5fe
+    classDef process fill:#f3e5f5
+    classDef decision fill:#fff3e0
+    classDef action fill:#e8f5e8
+    classDef error fill:#ffebee
+    classDef success fill:#f1f8e9
+    
+    class A,L,M startEnd
+    class C2,D1,D2,E1,F1,F2,G2,H2,H3,I2,I3 process
+    class B,C1,C3,D3,E2,G1,G4,H1,H4,I1,I4,J1,J5,K3 decision
+    class D4,D5,D6,D9,E3,E4,E6,E7,F7,F8,F9,F10,G5,G6,G7,G8,G9,H5,H6,H7,I5,I6,I7,I8,J2,J3,J4,J6,J7,J8,K,K1,K2 action
+    class C4,C5,C6,C7,F4,F5,F6 error
+    class L success 

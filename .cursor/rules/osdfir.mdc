@@ -1,0 +1,228 @@
+---
+description: "OSDFIR Infrastructure deployment rules for Minikube - ensuring consistent and repeatable deployments"
+globs: 
+alwaysApply: false
+---
+rules:
+  # Core Infrastructure Rules
+  - name: "Helm values file must exist"
+    condition: file.exists("helm/osdfir-infra-values.yaml")
+    message: "The Helm values file for OSDFIR Infrastructure is missing."
+
+  - name: "Required folders must exist"
+    condition: all(
+      file.exists("helm"),
+      file.exists("scripts"),
+      file.exists("manifests")
+    )
+    message: "One or more required folders (helm, scripts, manifests) are missing."
+
+  - name: "Git must be initialized"
+    condition: file.exists(".git")
+    message: "Git is not initialized for this project. Run 'git init'."
+
+  # Tool Configuration Rules
+  - name: "Each enabled tool must be configured in Helm values"
+    condition: all(
+      file.contains("helm/osdfir-infra-values.yaml", "timesketch"),
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik"),
+      file.contains("helm/osdfir-infra-values.yaml", "yeti"),
+      file.contains("helm/osdfir-infra-values.yaml", "hashr")
+    )
+    message: "All required tools (Timesketch, OpenRelik, Yeti, HashR) must be configured in Helm values."
+
+  - name: "Excluded tools should be disabled"
+    condition: all(
+      file.contains("helm/osdfir-infra-values.yaml", "grr:\n    enabled: false"),
+      file.contains("helm/osdfir-infra-values.yaml", "turbinia:\n    enabled: false")
+    )
+    message: "Excluded tools (GRR, Turbinia) should be explicitly disabled in global settings."
+
+  - name: "PVC configuration must be consistent"
+    condition: all(
+      file.contains("helm/osdfir-infra-values.yaml", "existingPVC: osdfirvolume"),
+      file.contains("helm/osdfir-infra-values.yaml", "persistence:\n    enabled: true")
+    )
+    message: "All tools should use consistent PVC configuration (osdfirvolume)."
+
+  # Container Image Rules
+  - name: "Timesketch should use official OSDFIR registry"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "us-docker.pkg.dev/osdfir-registry/timesketch")
+    message: "Timesketch should use the official OSDFIR registry image."
+
+  - name: "HashR should use official OSDFIR registry"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "us-docker.pkg.dev/osdfir-registry/hashr")
+    message: "HashR should use the official OSDFIR registry image."
+
+  - name: "OpenRelik should use GitHub Container Registry"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "ghcr.io/openrelik/")
+    message: "OpenRelik components should use GitHub Container Registry (ghcr.io/openrelik/)."
+
+  - name: "Yeti should use official images"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "yetiplatform/yeti")
+    message: "Yeti should use official yetiplatform images."
+
+  # OpenRelik Worker Configuration
+  - name: "OpenRelik workers must be properly configured"
+    condition: all(
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik-worker-analyzer-config"),
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik-worker-plaso"),
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik-worker-strings"),
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik-worker-timesketch"),
+      file.contains("helm/osdfir-infra-values.yaml", "openrelik-worker-extraction")
+    )
+    message: "All required OpenRelik workers must be configured."
+
+  # Script Requirements
+  - name: "Minikube startup script should exist"
+    condition: file.exists("scripts/start-minikube.sh") || file.exists("scripts/start-minikube.ps1")
+    message: "Create a script for starting Minikube with proper resource allocation."
+
+  - name: "Deployment script should exist"
+    condition: file.exists("scripts/deploy.sh") || file.exists("scripts/deploy.ps1")
+    message: "Create a deployment script for installing the OSDFIR infrastructure."
+
+  - name: "PVC setup script should exist"
+    condition: file.exists("scripts/setup-pvc.sh") || file.exists("scripts/setup-pvc.ps1")
+    message: "Create a script for setting up the osdfirvolume PVC."
+
+  # Manifest Requirements
+  - name: "Namespace manifest should exist"
+    condition: file.exists("manifests/namespace.yaml")
+    message: "Create a namespace manifest for the OSDFIR deployment."
+
+  - name: "PVC manifest should exist"
+    condition: file.exists("manifests/pvc.yaml")
+    message: "Create a PVC manifest for osdfirvolume storage."
+
+  # Documentation Rules
+  - name: "README should reference OSDFIR and Minikube"
+    condition: all(
+      file.contains("README.md", "OSDFIR"),
+      file.contains("README.md", "minikube") || file.contains("README.md", "Minikube")
+    )
+    message: "README.md should reference OSDFIR and Minikube usage."
+
+  - name: "README must include deployment steps"
+    condition: all(
+      file.contains("README.md", "deployment") || file.contains("README.md", "deploy"),
+      file.contains("README.md", "Quick Start") || file.contains("README.md", "Getting Started")
+    )
+    message: "README.md must include clear deployment steps and getting started section."
+
+  - name: "Minikube resource requirements documented"
+    condition: file.contains("notes.md", "minikube start --memory") || file.contains("README.md", "minikube start --memory")
+    message: "Document Minikube resource requirements (memory/CPU) for OSDFIR tools."
+
+  - name: "Tool references should be documented"
+    condition: all(
+      file.contains("notes.md", "timesketch.org") || file.contains("README.md", "timesketch.org"),
+      file.contains("notes.md", "openrelik.org") || file.contains("README.md", "openrelik.org"),
+      file.contains("notes.md", "yeti-platform.io") || file.contains("README.md", "yeti-platform.io")
+    )
+    message: "Include references to official tool documentation in notes.md or README.md."
+
+  # Workflow and Process Rules
+  - name: "Document OSDFIR workflow decisions"
+    condition: file.contains("notes.md", "workflow") || file.contains("notes.md", "process")
+    message: "Document your OSDFIR analysis workflow and tool integration decisions."
+
+  - name: "Include troubleshooting section"
+    condition: file.contains("notes.md", "troubleshooting") || file.contains("notes.md", "issues")
+    message: "Add a troubleshooting section for common deployment issues."
+
+  # Version Control Rules
+  - name: "Core files should be tracked in Git"
+    condition: all(
+      file.tracked("helm/osdfir-infra-values.yaml"),
+      file.tracked("README.md"),
+      file.tracked("notes.md")
+    )
+    message: "Core configuration files should be tracked in Git for reproducibility."
+
+  - name: "Scripts should be executable and tracked"
+    condition: file.tracked("scripts/") 
+    message: "Deployment scripts should be tracked in Git and executable."
+
+  # Security and Best Practices
+  - name: "PostgreSQL version should be specified"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "postgres:\n      tag:")
+    message: "PostgreSQL versions should be explicitly specified for reproducible deployments."
+
+  - name: "Redis version should be specified"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "redis:\n    image:\n      repository: redis\n      tag:")
+    message: "Redis version should be explicitly specified."
+
+  # Windows Environment Rules
+  - name: "PowerShell scripts should exist for Windows"
+    condition: all(
+      file.exists("scripts/start-minikube.ps1"),
+      file.exists("scripts/deploy.ps1"),
+      file.exists("scripts/setup-pvc.ps1")
+    )
+    message: "PowerShell scripts (.ps1) should be created for Windows environments."
+
+  - name: "Docker Desktop should be documented"
+    condition: file.contains("README.md", "Docker Desktop") || file.contains("notes.md", "Docker Desktop")
+    message: "Document Docker Desktop for Windows as a prerequisite."
+
+  - name: "PowerShell execution policy should be documented"
+    condition: file.contains("notes.md", "ExecutionPolicy") || file.contains("README.md", "ExecutionPolicy")
+    message: "Document PowerShell execution policy requirements for running scripts."
+
+  - name: "Windows-specific Minikube driver should be documented"
+    condition: file.contains("notes.md", "docker") && file.contains("notes.md", "driver")
+    message: "Document using Docker driver for Minikube on Windows."
+
+  # Process Documentation Rules
+  - name: "Mermaid flowchart must exist"
+    condition: file.exists("docs/workflow.mmd") || file.exists("docs/operations-flow.mmd") || file.exists("workflow.mmd")
+    message: "Create a Mermaid flowchart file to document operations and workflow."
+
+  - name: "Deployment flow should be visualized"
+    condition: file.contains("docs/workflow.mmd", "deployment") || file.contains("docs/operations-flow.mmd", "deployment") || file.contains("workflow.mmd", "deployment")
+    message: "Mermaid flowchart should include deployment process visualization."
+
+  - name: "Tool interaction flow should be documented"
+    condition: file.contains("docs/workflow.mmd", "timesketch") || file.contains("docs/operations-flow.mmd", "openrelik") || file.contains("workflow.mmd", "workflow")
+    message: "Mermaid flowchart should show how OSDFIR tools interact with each other."
+
+  - name: "Troubleshooting flowchart should exist"
+    condition: file.exists("docs/troubleshooting-flow.mmd") || file.contains("docs/workflow.mmd", "troubleshooting")
+    message: "Consider creating a troubleshooting flowchart for common issues."
+
+  # Windows-Specific Prerequisites
+  - name: "WSL2 considerations should be documented"
+    condition: file.contains("notes.md", "WSL2") || file.contains("README.md", "WSL2")
+    message: "Document WSL2 considerations if using Linux containers on Windows."
+
+  - name: "Windows firewall considerations"
+    condition: file.contains("notes.md", "firewall") || file.contains("notes.md", "port")
+    message: "Document Windows firewall and port access requirements."
+
+  # Script Quality Rules
+  - name: "PowerShell scripts should have error handling"
+    condition: file.contains("scripts/deploy.ps1", "try") || file.contains("scripts/deploy.ps1", "ErrorAction")
+    message: "PowerShell scripts should include proper error handling."
+
+  - name: "PowerShell scripts should be executable"
+    condition: file.contains("scripts/deploy.ps1", "#Requires") || file.contains("README.md", "Set-ExecutionPolicy")
+    message: "Document PowerShell execution requirements and script permissions."
+
+  # Optional Enhancement Rules
+  - name: "Consider ingress configuration"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "ingress") || file.exists("manifests/ingress.yaml")
+    message: "Consider adding ingress configuration for external access to tools."
+
+  - name: "Resource limits should be defined"
+    condition: file.contains("helm/osdfir-infra-values.yaml", "resources:") || file.contains("helm/osdfir-infra-values.yaml", "limits:")
+    message: "Consider defining resource requests and limits for better cluster management."
+
+  - name: "Backup strategy should be documented"
+    condition: file.contains("notes.md", "backup") || file.contains("README.md", "backup")
+    message: "Document backup strategy for persistent data and case files."
+
+  - name: "Docs folder should exist for flowcharts"
+    condition: file.exists("docs/")
+    message: "Create a docs/ folder for Mermaid flowcharts and additional documentation."
+
