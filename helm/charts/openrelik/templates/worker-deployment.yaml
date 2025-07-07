@@ -36,6 +36,22 @@ spec:
           {{- else if .env }}
             {{- toYaml .env | nindent 12 }} 
           {{- end }}
+          {{- if and (eq .name "openrelik-worker-llm") $.Values.config.analyzers }}
+            {{- if $.Values.config.analyzers.llm }}
+            {{- if $.Values.config.analyzers.llm.max_input_tokens }}
+            - name: LLM_MAX_INPUT_TOKENS
+              value: "{{ $.Values.config.analyzers.llm.max_input_tokens }}"
+            {{- end }}
+            {{- if $.Values.config.analyzers.llm.ollama_server_url }}
+            - name: OLLAMA_SERVER_URL
+              value: "{{ $.Values.config.analyzers.llm.ollama_server_url }}"
+            {{- end }}
+            {{- if $.Values.config.analyzers.llm.model }}
+            - name: OLLAMA_DEFAULT_MODEL
+              value: "{{ $.Values.config.analyzers.llm.model }}"
+            {{- end }}
+            {{- end }}
+          {{- end }}
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
@@ -44,6 +60,10 @@ spec:
           volumeMounts:
             - mountPath: /mnt/openrelikvolume
               name: openrelikvolume
+            {{- if $.Values.config.analyzers }}
+            - name: analyzer-config
+              mountPath: /usr/share/openrelik/data
+            {{- end }}
           {{- if .resources }}
           resources:
             {{- toYaml .resources | nindent 12 }}
@@ -57,4 +77,9 @@ spec:
             claimName: {{ $.Release.Name }}-openrelikvolume-claim
             {{- end }}
             readOnly: false
+        {{- if $.Values.config.analyzers }}
+        - name: analyzer-config
+          configMap:
+            name: {{ $.Release.Name }}-worker-analyzer-config
+        {{- end }}
 {{- end }}

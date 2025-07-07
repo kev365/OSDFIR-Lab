@@ -190,6 +190,11 @@ workers:
   command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
   env: {}
   resources: {}
+- name: openrelik-worker-llm
+  image: ghcr.io/openrelik/openrelik-worker-llm:2024.11.27
+  command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-llm"
+  env: {}
+  resources: {}
 ## @section OpenRelik Configuration Parameters
 ##
 config:
@@ -219,6 +224,9 @@ config:
       ## content: |-
       ##   name1@domain
       ##   name2@domain
+  ## OpenRelik analyzer configuration
+  ##
+  analyzers: {}
 ## Persistence Storage Parameters
 ##
 persistence:

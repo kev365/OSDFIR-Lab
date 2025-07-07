@@ -1,0 +1,364 @@
+global:
+  timesketch:
+    enabled: false
+  openrelik:
+    enabled: true
+  yeti:
+    enabled: false  # Not currently used in the lab
+  hashr:
+    enabled: false
+  grr:
+    enabled: false
+
+timesketch:
+  image:
+    repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
+    tag: "20250521" #20250408
+  config:
+    existingConfigMap: ""
+    createUser: true
+    oidc:
+      enabled: false
+  frontend:
+    resources:
+      limits: {}
+      requests: {}
+  worker:
+    resources:
+      limits: {}
+      requests: {}
+  nginx:
+    image:
+      repository: nginx
+      tag: "1.29.0-alpine3.22-slim"  #1.25.5-alpine-slim
+      pullPolicy: IfNotPresent
+  securityContext:
+    enabled: true
+  opensearch:
+    image:
+      repository: opensearchproject/opensearch
+      tag: "2.19.2"   #"2.15.0"
+    replicas: 1
+    sysctlInit:
+      enabled: true
+    opensearchJavaOpts: "-Xmx512M -Xms512M"
+  redis:
+    image:
+      repository: redis
+      tag: "7.4.4-alpine"   #7.4.2-alpine
+  postgresql:
+    image:
+      repository: postgres
+      tag: "17.5"   #17.2-alpine
+
+hashr:
+  image:
+    repository: us-docker.pkg.dev/osdfir-registry/hashr/release/hashr
+    pullPolicy: IfNotPresent
+    tag: v1.8.2
+  postgresql:
+    image:
+      repository: postgres
+      tag: "17.5"   #17.2-alpine
+
+yeti:
+  persistence:
+    enabled: true
+    existingPVC: osdfirvolume
+  frontend:
+    image:
+      repository: yetiplatform/yeti-frontend
+      pullPolicy: Always
+      tag: 2.4.1
+  api:
+    image:
+      repository: yetiplatform/yeti
+      pullPolicy: Always
+      tag: 2.4.1
+#    resources:
+#      limits:
+#        cpu:    "500m"
+#        memory: "1Gi"
+#      requests:
+#        cpu:    "500m"
+#        memory: "1Gi"
+  tasks:
+    image:
+      repository: yetiplatform/yeti
+      pullPolicy: Always
+      tag: 2.4.1
+  redis:
+    image:
+      repository: redis
+      tag: "7.4.4-alpine"   #7.4.2-alpine
+  arangodb:
+    image:
+      repository: arangodb
+      pullPolicy: Always
+      tag: "3.12.5" #3.11.8
+
+openrelik:
+  # Frontend/UI configuration
+  frontend:
+    image:
+      repository: ghcr.io/openrelik/openrelik-ui
+      pullPolicy: IfNotPresent
+      tag: "0.6.0"
+  # API/Server configuration - Standard deployment
+  api:
+    image:
+      repository: ghcr.io/openrelik/openrelik-server
+      pullPolicy: IfNotPresent
+      tag: "0.6.0"
+#    resources:
+#      limits:
+#        cpu:    "500m"
+#        memory: "1Gi"
+#      requests:
+#        cpu:    "500m"
+#        memory: "1Gi"
+    # Standard server configuration
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8710"]
+    env:
+      REDIS_URL: "redis://openrelik-redis:6379"
+
+  # Additional OpenRelik components
+  mediator:
+    image:
+      repository: ghcr.io/openrelik/openrelik-mediator
+      pullPolicy: IfNotPresent
+      tag: "0.6.0"
+  
+  metrics:
+    image:
+      repository: ghcr.io/openrelik/openrelik-metrics
+      pullPolicy: IfNotPresent
+      tag: "0.6.0"
+  
+  # Redis configuration
+  redis:
+    image:
+      repository: redis
+      tag: "7.4.4-alpine"   #7.4.2-alpine
+  
+  # PostgreSQL configuration
+  postgresql:
+    image:
+      repository: postgres
+      tag: "17.5"   #17.2-alpine
+  
+  # Prometheus for metrics
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: "v3.4.2" #"v3.0.1"
+
+  extraEnv:
+    - name: OLLAMA_SERVER_URL
+      value: "http://ollama.osdfir.svc.cluster.local:11434"
+    - name: OLLAMA_DEFAULT_MODEL
+      value: "ai/gemma3n/4B-Q4_K_M"
+
+  # LLM analyzer configuration
+  config:
+    analyzers:
+      llm:
+        provider: ollama-gemma3n
+        model: OLLAMA_DEFAULT_MODEL
+        max_input_tokens: 1024
+        ollama_server_url: OLLAMA_SERVER_URL
+
+  # OpenRelik Workers
+  workers:
+    - name: openrelik-worker-analyzer-config
+      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-analyzer-config"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-plaso
+      image: ghcr.io/openrelik/openrelik-worker-plaso:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-strings
+      image: ghcr.io/openrelik/openrelik-worker-strings:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"
+      env: {}
+      resources: {}
+
+      ## When deployed via the OSDFIR Infrastructure chart, the Timesketch Worker   
+      ## automatically receives its required environment variables through Helm.
+    - name: openrelik-worker-timesketch
+      image: ghcr.io/openrelik/openrelik-worker-timesketch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-extraction
+      image: ghcr.io/openrelik/openrelik-worker-extraction@sha256:05c0a93d2449888919a6f9aa09e2c30be5e214578c2c9c3c823d4a12b573de6e
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-analyzer-logs
+      image: ghcr.io/openrelik/openrelik-worker-analyzer-logs:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-analyzer-logs"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-bulkextractor
+      image: ghcr.io/openrelik/openrelik-worker-bulkextractor:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-bulkextractor"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-capa
+      image: ghcr.io/openrelik/openrelik-worker-capa:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-capa"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-chromecreds
+      image: ghcr.io/openrelik/openrelik-worker-chromecreds:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-chromecreds"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-cloud-logs
+      image: ghcr.io/openrelik/openrelik-worker-cloud-logs:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-cloud-logs"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-dfindexeddb
+      image: ghcr.io/openrelik/openrelik-worker-dfindexeddb:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-dfindexeddb"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-entropy
+      image: ghcr.io/openrelik/openrelik-worker-entropy:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-entropy"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-exif
+      image: ghcr.io/openrelik/openrelik-worker-exif:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-exif"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-grep
+      image: ghcr.io/openrelik/openrelik-worker-grep:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-grep"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-hayabusa
+      image: ghcr.io/openrelik/openrelik-worker-hayabusa:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-hayabusa"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-llm
+      image: ghcr.io/openrelik/openrelik-worker-llm:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-llm"
+      env: {}
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 500m
+        limits:
+          memory: 2Gi
+          cpu: 1
+
+    - name: openrelik-worker-os-creds
+      image: ghcr.io/openrelik/openrelik-worker-os-creds:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-os-creds"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-yara
+      image: ghcr.io/openrelik/openrelik-worker-yara:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-yara"
+      env: {}
+      resources: {}
+
+# Security Settings
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Pod security standards
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+# Network Policies
+networkPolicy:
+  enabled: true
+
+extraManifests:
+  - |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ollama-cache
+      namespace: osdfir
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ollama
+      namespace: osdfir
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: ollama
+      template:
+        metadata:
+          labels:
+            app: ollama
+        spec:
+          containers:
+            - name: ollama
+              image: ollama/ollama
+              ports:
+                - containerPort: 11434
+              volumeMounts:
+                - name: ollama-cache
+                  mountPath: /root/.ollama
+              resources:
+                requests:
+                  memory: 2Gi
+                  cpu: 1
+                limits:
+                  memory: 4Gi
+                  cpu: 2
+          volumes:
+            - name: ollama-cache
+              persistentVolumeClaim:
+                claimName: ollama-cache
+  - |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: ollama
+      namespace: osdfir
+    spec:
+      selector:
+        app: ollama
+      ports:
+        - port: 11434
+          targetPort: 11434
+          protocol: TCP

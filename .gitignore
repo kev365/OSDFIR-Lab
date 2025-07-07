@@ -1,0 +1,28 @@
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Cursor metadata
+.cursor/
+
+# Reference repositories
+_reference_repos/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+
+# Environment files
+.env
+
+# Log files
+*.log 

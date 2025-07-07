@@ -58,6 +58,10 @@ spec:
             - mountPath: /app/settings.toml
               subPath: settings.toml
               name: openrelik-configs-dir
+            {{- if .Values.config.analyzers }}
+            - name: analyzer-config
+              mountPath: /usr/share/openrelik/data
+            {{- end }}
           ports:
             - containerPort: 8710
           resources:
@@ -87,4 +91,9 @@ spec:
             - key: authenticated-emails-list
               path: authenticated-emails-list
             secretName: {{ include "openrelik.oidc.authenticatedemails" . }}
+        {{- end }}
+        {{- if .Values.config.analyzers }}
+        - name: analyzer-config
+          configMap:
+            name: {{ .Release.Name }}-worker-analyzer-config
         {{- end }}

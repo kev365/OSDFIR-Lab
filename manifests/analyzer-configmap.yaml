@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openrelik-worker-analyzer-config
+  namespace: osdfir
+data:
+  openrelik.yaml: |
+    analyzers:
+      llm:
+        provider: ollama
+        model: llama3:instruct
+        max_input_tokens: 1024 

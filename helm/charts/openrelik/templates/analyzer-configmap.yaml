@@ -1,0 +1,12 @@
+{{- if .Values.config.analyzers }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-worker-analyzer-config
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: "worker-analyzer-config"
+data:
+  openrelik.yaml: |-
+{{ toYaml .Values.config.analyzers | indent 4 }}
+{{- end }} 

@@ -1,0 +1,20 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Commands
+
+## Cluster Startup
+- `powershell -File scripts/start-minikube.ps1 -deploy`  # Start Minikube, enable addons, and run tunnel in background
+
+## Terraform Provisioning
+- `cd terraform/ && terraform init && terraform plan -out plan.tfplan && terraform apply -auto-approve`  # Provision namespace, PVC, and Helm release (osdfir-lab)
+
+## Import Helm Release
+- `terraform import helm_release.osdfir-lab osdfir-lab --namespace osdfir`  # Import existing Helm release into Terraform state
+
+## Accessing Services
+- `kubectl get ingress -n osdfir`  # List ingress resources
+- `minikube tunnel`  # Ensure ingress is accessible on localhost
+- Open `http://localhost/<service-path>` in your browser to access services.
