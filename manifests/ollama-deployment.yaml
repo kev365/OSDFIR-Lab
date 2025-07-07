@@ -8,7 +8,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      storage: 15Gi
   storageClassName: standard
 ---
 apiVersion: apps/v1
@@ -26,11 +26,27 @@ spec:
       labels:
         app: ollama
     spec:
-      containers:
-        - name: ollama
+      initContainers:
+        - name: model-puller
           image: ollama/ollama:latest
-          ports:
-            - containerPort: 11434
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Starting Ollama service..."
+              ollama serve &
+              OLLAMA_PID=$!
+              
+              echo "Waiting for Ollama to be ready..."
+              while ! curl -f http://localhost:11434/api/tags >/dev/null 2>&1; do
+                sleep 2
+              done
+              
+              echo "Pulling model ai/gemma3n:4B-Q4_K_M..."
+              ollama pull ai/gemma3n:4B-Q4_K_M
+              
+              echo "Model pull completed, stopping init service..."
+              kill $OLLAMA_PID
+              wait $OLLAMA_PID
           volumeMounts:
             - name: ollama-cache
               mountPath: /root/.ollama
@@ -38,9 +54,41 @@ spec:
             requests:
               memory: "2Gi"
               cpu: "1"
-              ephemeral-storage: "1Gi"
             limits:
               memory: "4Gi"
+              cpu: "2"
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          env:
+            - name: OLLAMA_KEEP_ALIVE
+              value: "24h"
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+          volumeMounts:
+            - name: ollama-cache
+              mountPath: /root/.ollama
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "3Gi"
+              cpu: "1"
+              ephemeral-storage: "1Gi"
+            limits:
+              memory: "6Gi"
               cpu: "2"
               ephemeral-storage: "2Gi"
       volumes:
@@ -59,4 +107,23 @@ spec:
   ports:
     - protocol: TCP
       port: 11434
-      targetPort: 11434 
+      targetPort: 11434
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-models-config
+  namespace: osdfir
+data:
+  available-models.json: |
+    {
+      "models": [
+        {
+          "name": "ai/gemma3n:4B-Q4_K_M",
+          "display_name": "Gemma 3N 4B Q4_K_M",
+          "description": "Gemma 3N 4B model with Q4_K_M quantization",
+          "context_length": 8192,
+          "capabilities": ["text-generation", "analysis", "forensics"]
+        }
+      ]
+    } 

@@ -1,101 +1,71 @@
-flowchart TD
-    %% Prerequisites and Setup
-    A[Prerequisites Check] --> B{Docker Desktop<br/>Running?}
-    B -->|No| B1[Start Docker Desktop]
-    B1 --> C[PowerShell Execution Policy]
-    B -->|Yes| C[PowerShell Execution Policy]
-    C --> D[Check Minikube Installation]
+graph TD
+    A[Start OSDFIR Lab Deployment] --> B{Prerequisites Check}
+    B -->|Missing Tools| C[Install Docker Desktop<br/>Minikube, kubectl<br/>Terraform, Helm]
+    B -->|All Present| D[Run Management Script<br/>manage-osdfir.ps1 deploy]
+    C --> D
     
-    %% Minikube Setup
-    D --> E[Run start-minikube.ps1]
-    E --> F[Minikube Start<br/>--driver=docker<br/>--memory=8192<br/>--cpus=4]
-    F --> G{Minikube<br/>Started?}
-    G -->|No| H[Troubleshoot:<br/>Check Docker,<br/>Resources, Firewall]
-    H --> F
-    G -->|Yes| I[Enable Addons:<br/>ingress, storage]
+    D --> E[Start Minikube Cluster<br/>scripts/start-minikube.ps1 -deploy]
+    E --> F[Apply Terraform Config<br/>terraform apply -auto-approve]
+    F --> G[Deploy OSDFIR Helm Charts<br/>Timesketch + OpenRelik]
+    G --> H[Deploy Ollama AI Service<br/>manifests/ollama-deployment.yaml]
     
-    %% Storage Setup
-    I --> J[Run setup-pvc.ps1]
-    J --> K[Create Namespace:<br/>osdfir]
-    K --> L[Create PVC:<br/>osdfirvolume]
-    L --> M{Storage<br/>Ready?}
-    M -->|No| N[Check Storage Class<br/>and PV Provisioning]
-    N --> L
-    M -->|Yes| O[Helm Add OSDFIR Repo]
+    H --> I{Model Download Status}
+    I -->|In Progress| J[Wait for AI Model Download<br/>ai/gemma3n:4B-Q4_K_M (~2.5GB)]
+    J --> K[Model Downloaded<br/>Ollama Service Ready]
+    I -->|Complete| K
     
-    %% Helm Deployment
-    O --> P[Run deploy.ps1]
-    P --> Q[Helm Install with<br/>osdfir-infra-values.yaml]
-    Q --> R{Deployment<br/>Successful?}
-    R -->|No| S[Check:<br/>- Resources<br/>- Images<br/>- PVC Binding]
-    S --> Q
-    R -->|Yes| T[Verify Pod Status]
+    K --> L[Configure OpenRelik AI Integration<br/>Environment Variables Set]
+    L --> M[Start Port Forwarding<br/>Background Jobs Created]
+    M --> N[OSDFIR Lab Ready]
     
-    %% Tool Verification
-    T --> U{All Pods<br/>Running?}
-    U -->|No| V[kubectl describe pods<br/>Check logs]
-    V --> W[Debug Issues:<br/>- Image Pull<br/>- Resource Limits<br/>- PVC Mount]
-    W --> U
-    U -->|Yes| X[Port Forward Services]
+    N --> O{Access Services}
+    O --> P[Timesketch UI<br/>http://localhost:5000]
+    O --> Q[OpenRelik UI<br/>http://localhost:8711]
+    O --> R[OpenRelik API<br/>http://localhost:8710]
+    O --> S[AI Model Testing<br/>manage-osdfir.ps1 ollama]
     
-    %% Access and Testing
-    X --> Y[Access Tools]
-    Y --> Z1[Timesketch<br/>localhost:9000]
-    Y --> Z2[OpenRelik UI<br/>localhost:8080]
-    Y --> Z3[Yeti Frontend<br/>localhost:8000]
-    Y --> Z4[HashR<br/>localhost:5000]
+    P --> T[Digital Forensics Timeline Analysis]
+    Q --> U[Evidence Processing Pipeline]
+    R --> V[API-Based Analysis]
+    S --> W[AI-Assisted Evidence Analysis<br/>Using Gemma 3N Model]
     
-    %% Tool Workflow
-    Z1 --> AA[OSDFIR Analysis Workflow]
-    Z2 --> AA
-    Z3 --> AA
-    Z4 --> AA
+    T --> X[Investigation Results]
+    U --> X
+    V --> X
+    W --> X
     
-    AA --> BB[1. Data Ingestion<br/>Upload Evidence to<br/>Shared Storage]
-    BB --> CC[2. OpenRelik Processing<br/>- Plaso Timeline<br/>- String Extraction<br/>- File Analysis]
-    CC --> DD[3. Timesketch Analysis<br/>- Timeline Visualization<br/>- Search & Filter<br/>- Collaborative Notes]
-    DD --> EE[4. Threat Intelligence<br/>- Yeti IoC Matching<br/>- Context Enrichment]
-    EE --> FF[5. Hash Analysis<br/>- HashR Lookups<br/>- Known File Identification]
-    FF --> GG[6. Investigation Results<br/>- Export Findings<br/>- Generate Reports]
+    X --> Y{Continue Investigation}
+    Y -->|Yes| Z[Process More Evidence]
+    Y -->|No| AA[Export Results<br/>Generate Reports]
     
-    %% Data Flow Between Tools
-    subgraph "Data Flow"
-        H1[osdfirvolume PVC] --> H2[Shared Storage]
-        H2 --> H3[Evidence Files]
-        H3 --> H4[OpenRelik Workers]
-        H4 --> H5[Processed Artifacts]
-        H5 --> H6[Timesketch Database]
-        H6 --> H7[Analysis Results]
-        H7 --> H8[Yeti Intelligence]
-        H8 --> H9[HashR Verification]
+    Z --> U
+    AA --> BB[Cleanup Environment<br/>manage-osdfir.ps1 undeploy]
+    
+    subgraph "AI Integration Features"
+        W1[Automated Evidence Correlation]
+        W2[Forensic Artifact Analysis]
+        W3[Timeline Pattern Detection]
+        W4[IOC Identification]
+        W --> W1
+        W --> W2
+        W --> W3
+        W --> W4
     end
     
-    %% Troubleshooting Decision Points
-    subgraph "Common Issues"
-        T1[Pod Stuck in Pending] --> T2[Check PVC Binding]
-        T3[Image Pull Errors] --> T4[Check Registry Access]
-        T5[Out of Resources] --> T6[Scale Down or<br/>Increase Minikube Resources]
-        T7[Service Not Accessible] --> T8[Check Port Forwarding<br/>and Service Status]
+    subgraph "Management Operations"
+        M1[Check Status<br/>manage-osdfir.ps1 status]
+        M2[View Logs<br/>manage-osdfir.ps1 logs]
+        M3[Get Credentials<br/>manage-osdfir.ps1 creds]
+        M4[Monitor AI<br/>manage-osdfir.ps1 ollama]
+        N --> M1
+        N --> M2
+        N --> M3
+        N --> M4
     end
     
-    %% Maintenance Operations
-    GG --> MM[Maintenance Tasks]
-    MM --> MM1[Backup Data<br/>kubectl cp from PVC]
-    MM --> MM2[Update Images<br/>helm upgrade]
-    MM --> MM3[Scale Resources<br/>helm upgrade values]
-    MM --> MM4[Clean Up<br/>helm uninstall]
-    
-    %% Styling
-    classDef startEnd fill:#e1f5fe
-    classDef process fill:#f3e5f5
-    classDef decision fill:#fff3e0
-    classDef tool fill:#e8f5e8
-    classDef error fill:#ffebee
-    classDef data fill:#f1f8e9
-    
-    class A,GG startEnd
-    class E,J,P,X process
-    class B,G,M,R,U decision
-    class Z1,Z2,Z3,Z4 tool
-    class H,S,V,W error
-    class H1,H2,H3,H4,H5,H6,H7,H8,H9 data 
+    subgraph "Storage Management"
+        S1[Shared PVC: osdfirvolume<br/>Evidence Storage]
+        S2[Ollama Model Cache<br/>AI Model Storage]
+        G --> S1
+        H --> S2
+    end 

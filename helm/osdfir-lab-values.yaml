@@ -153,20 +153,34 @@ openrelik:
       repository: prom/prometheus
       tag: "v3.4.2" #"v3.0.1"
 
+  # Ollama integration environment variables
   extraEnv:
     - name: OLLAMA_SERVER_URL
       value: "http://ollama.osdfir.svc.cluster.local:11434"
     - name: OLLAMA_DEFAULT_MODEL
-      value: "ai/gemma3n/4B-Q4_K_M"
+      value: "ai/gemma3n:4B-Q4_K_M"
+    - name: OPENRELIK_AI_ENABLED
+      value: "true"
+    - name: OPENRELIK_AI_PROVIDER
+      value: "ollama"
 
   # LLM analyzer configuration
   config:
     analyzers:
       llm:
-        provider: ollama-gemma3n
-        model: OLLAMA_DEFAULT_MODEL
-        max_input_tokens: 1024
-        ollama_server_url: OLLAMA_SERVER_URL
+        provider: "ollama"
+        model: "ai/gemma3n:4B-Q4_K_M"
+        max_input_tokens: 4096  # Increased for better context
+        max_output_tokens: 1024
+        temperature: 0.1  # Lower temperature for more consistent forensic analysis
+        ollama_server_url: "http://ollama.osdfir.svc.cluster.local:11434"
+        system_prompt: |
+          You are a digital forensics AI assistant. Analyze the provided data with attention to:
+          - Suspicious patterns or anomalies
+          - Potential indicators of compromise
+          - Timeline relationships
+          - Data correlation opportunities
+          Provide clear, actionable insights for investigators.
 
   # OpenRelik Workers
   workers:
@@ -262,17 +276,30 @@ openrelik:
       env: {}
       resources: {}
 
+    # Enhanced LLM worker with Gemma 3N model configuration
     - name: openrelik-worker-llm
       image: ghcr.io/openrelik/openrelik-worker-llm:latest
-      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-llm"
-      env: {}
+      command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-llm"
+      env:
+        - name: OLLAMA_SERVER_URL
+          value: "http://ollama.osdfir.svc.cluster.local:11434"
+        - name: OLLAMA_DEFAULT_MODEL
+          value: "ai/gemma3n:4B-Q4_K_M"
+        - name: LLM_PROVIDER
+          value: "ollama"
+        - name: LLM_MODEL_NAME
+          value: "ai/gemma3n:4B-Q4_K_M"
+        - name: LLM_MAX_TOKENS
+          value: "4096"
+        - name: LLM_TEMPERATURE
+          value: "0.1"
       resources:
         requests:
-          memory: 1Gi
-          cpu: 500m
-        limits:
           memory: 2Gi
           cpu: 1
+        limits:
+          memory: 4Gi
+          cpu: 2
 
     - name: openrelik-worker-os-creds
       image: ghcr.io/openrelik/openrelik-worker-os-creds:latest
@@ -301,64 +328,5 @@ podSecurityContext:
 networkPolicy:
   enabled: true
 
-extraManifests:
-  - |
-    apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: ollama-cache
-      namespace: osdfir
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 10Gi
-  - |
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: ollama
-      namespace: osdfir
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: ollama
-      template:
-        metadata:
-          labels:
-            app: ollama
-        spec:
-          containers:
-            - name: ollama
-              image: ollama/ollama
-              ports:
-                - containerPort: 11434
-              volumeMounts:
-                - name: ollama-cache
-                  mountPath: /root/.ollama
-              resources:
-                requests:
-                  memory: 2Gi
-                  cpu: 1
-                limits:
-                  memory: 4Gi
-                  cpu: 2
-          volumes:
-            - name: ollama-cache
-              persistentVolumeClaim:
-                claimName: ollama-cache
-  - |
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: ollama
-      namespace: osdfir
-    spec:
-      selector:
-        app: ollama
-      ports:
-        - port: 11434
-          targetPort: 11434
-          protocol: TCP
+# Note: Ollama deployment is now managed via separate manifests/ollama-deployment.yaml
+# This provides better control over model initialization and resource allocation

@@ -1,18 +1,87 @@
----
-description:
-globs:
-alwaysApply: false
----
 # Commands
 
-## Cluster Startup
+This file collects useful commands for managing the OSDFIR Minikube infrastructure with AI integration.
+
+## Management Script (Recommended)
+
+- `powershell -File scripts/manage-osdfir.ps1 deploy`  # Full deployment including AI model
+- `powershell -File scripts/manage-osdfir.ps1 status`  # Check deployment and AI status
+- `powershell -File scripts/manage-osdfir.ps1 ollama`  # Check Ollama AI model status
+- `powershell -File scripts/manage-osdfir.ps1 start`   # Start port forwarding
+- `powershell -File scripts/manage-osdfir.ps1 creds`   # Get login credentials
+- `powershell -File scripts/manage-osdfir.ps1 undeploy -Force`  # Complete cleanup
+
+## Manual Deployment
+
 - `powershell -File scripts/start-minikube.ps1 -deploy`  # Start Minikube, enable addons, and run tunnel in background
+- `cd terraform/ && terraform init && terraform apply -auto-approve`  # Provision namespace, PVC, Helm release (osdfir-lab), and Ollama
 
-## Terraform Provisioning
-- `cd terraform/ && terraform init && terraform plan -out plan.tfplan && terraform apply -auto-approve`  # Provision namespace, PVC, and Helm release (osdfir-lab)
+## Manual Undeployment
 
-## Import Helm Release
-- `terraform import helm_release.osdfir-lab osdfir-lab --namespace osdfir`  # Import existing Helm release into Terraform state
+- `helm uninstall osdfir-lab --namespace osdfir`
+- `kubectl delete -f manifests/namespace.yaml -f manifests/pvc.yaml`
+
+## Monitoring Pods
+
+- `kubectl get pods -n osdfir`
+- `kubectl get pods -n osdfir --watch`
+- `kubectl describe pod <pod-name> -n osdfir`
+
+## AI/Ollama Management
+
+- `kubectl logs -f ollama-<pod-id> -n osdfir`  # View Ollama logs
+- `kubectl exec -n osdfir ollama-<pod-id> -- ollama list`  # List available models
+- `kubectl exec -n osdfir ollama-<pod-id> -- curl -s http://localhost:11434/api/tags`  # Check models via API
+- `kubectl port-forward svc/ollama 11434:11434 -n osdfir`  # Direct Ollama access
+
+## Port-Forwarding
+
+- `kubectl get svc -n osdfir`  # List services and ports
+- `kubectl port-forward svc/osdfir-lab-timesketch 5000:5000 -n osdfir`
+- `kubectl port-forward svc/osdfir-lab-openrelik-ui 8711:8711 -n osdfir`
+- `kubectl port-forward svc/osdfir-lab-openrelik-api 8710:8710 -n osdfir`
+
+## Viewing Errors / Logs
+
+- `kubectl logs -f <pod-name> -n osdfir`
+- `kubectl logs -l app=timesketch -n osdfir`
+- `kubectl logs -l app=ollama -n osdfir`
+- `kubectl logs -l app.kubernetes.io/name=openrelik-api -n osdfir`
+
+## Getting Credentials
+
+- `kubectl get secret -n osdfir`
+- `kubectl get secret osdfir-lab-timesketch-credentials -n osdfir -o jsonpath="{.data.admin_password}" | base64 --decode`
+
+## AI Integration Testing
+
+- `kubectl exec -n osdfir <openrelik-api-pod> -- curl -s http://ollama.osdfir.svc.cluster.local:11434/api/tags`  # Test connectivity
+- `kubectl exec -n osdfir ollama-<pod-id> -- ollama run ai/gemma3n:4B-Q4_K_M "Analyze this forensic artifact"`  # Test model
+
+## Tips & Tricks
+
+- `helm list -n osdfir`
+- `minikube dashboard`
+- `kubectl top nodes`
+- `kubectl top pods -n osdfir`
+- `minikube tunnel`
+
+## Terraform
+
+- `cd terraform/`  # Change to Terraform configuration directory
+- `terraform init` # Initialize providers and modules
+- `terraform plan` # Preview infrastructure changes
+- `terraform apply -auto-approve` # Build infrastructure (includes AI components)
+- `terraform apply -auto-approve osdfir-lab-plan.tfplan` # Build infrastructure from specific plan
+- `terraform destroy -auto-approve` # Tear down infrastructure
+
+## AI Model Information
+
+- **Model**: ai/gemma3n:4B-Q4_K_M
+- **Size**: ~2.5GB download
+- **Context**: 8192 tokens
+- **Purpose**: Digital forensics analysis and evidence correlation
+- **Provider**: Ollama local instance
 
 ## Accessing Services
 - `kubectl get ingress -n osdfir`  # List ingress resources
