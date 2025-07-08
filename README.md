@@ -164,13 +164,6 @@ ai:
 
 Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/osdfir-lab-values.yaml`
 
-### Resource Allocation
-
-The script automatically detects and allocates:
-- **Memory:** 75% of Docker Desktop's available memory (minimum 4GB)
-- **CPU:** Half of available logical processors (minimum 2, maximum 8)
-- **Storage:** 40GB disk space
-
 ## Useful Resources
 
 - **[Commands Reference](commands.md)** - Comprehensive command list
