@@ -1,71 +1,78 @@
 graph TD
     A[Start OSDFIR Lab Deployment] --> B{Prerequisites Check}
     B -->|Missing Tools| C[Install Docker Desktop<br/>Minikube, kubectl<br/>Terraform, Helm]
-    B -->|All Present| D[Run Management Script<br/>manage-osdfir.ps1 deploy]
+    B -->|All Present| D[Run Unified Management Script<br/>manage-osdfir-lab.ps1 deploy]
     C --> D
     
-    D --> E[Start Minikube Cluster<br/>scripts/start-minikube.ps1 -deploy]
-    E --> F[Apply Terraform Config<br/>terraform apply -auto-approve]
-    F --> G[Deploy OSDFIR Helm Charts<br/>Timesketch + OpenRelik]
-    G --> H[Deploy Ollama AI Service<br/>manifests/ollama-deployment.yaml]
+    D --> E[Auto-Start Docker Desktop<br/>Resource Detection & Allocation]
+    E --> F[Start Minikube Cluster<br/>Optimal CPU/Memory Configuration]
+    F --> G[Apply Terraform Infrastructure<br/>Namespace, PVC, Helm Release]
+    G --> H[Deploy OSDFIR Tools<br/>Timesketch, OpenRelik, HashR, Yeti]
+    H --> I[Deploy Ollama AI Service<br/>Local AI Model Server]
     
-    H --> I{Model Download Status}
-    I -->|In Progress| J[Wait for AI Model Download<br/>ai/gemma3n:4B-Q4_K_M (~2.5GB)]
-    J --> K[Model Downloaded<br/>Ollama Service Ready]
-    I -->|Complete| K
+    I --> J{Model Download Status}
+    J -->|In Progress| K[Wait for AI Model Download<br/>gemma2:2b (~1.6GB)]
+    K --> L[Model Downloaded<br/>Ollama Service Ready]
+    J -->|Complete| L
     
-    K --> L[Configure OpenRelik AI Integration<br/>Environment Variables Set]
-    L --> M[Start Port Forwarding<br/>Background Jobs Created]
-    M --> N[OSDFIR Lab Ready]
+    L --> M[Configure AI Integration<br/>Centralized YAML Configuration]
+    M --> N[Start Port Forwarding<br/>Automatic Background Jobs]
+    N --> O[OSDFIR Lab Ready]
     
-    N --> O{Access Services}
-    O --> P[Timesketch UI<br/>http://localhost:5000]
-    O --> Q[OpenRelik UI<br/>http://localhost:8711]
-    O --> R[OpenRelik API<br/>http://localhost:8710]
-    O --> S[AI Model Testing<br/>manage-osdfir.ps1 ollama]
+    O --> P{Access Services}
+    P --> Q[Timesketch UI<br/>http://localhost:5000]
+    P --> R[OpenRelik UI<br/>http://localhost:8711]
+    P --> S[OpenRelik API<br/>http://localhost:8710]
+    P --> T[AI Model Testing<br/>manage-osdfir-lab.ps1 ollama]
     
-    P --> T[Digital Forensics Timeline Analysis]
-    Q --> U[Evidence Processing Pipeline]
-    R --> V[API-Based Analysis]
-    S --> W[AI-Assisted Evidence Analysis<br/>Using Gemma 3N Model]
+    Q --> U[Digital Forensics Timeline Analysis]
+    R --> V[Evidence Processing Pipeline]
+    S --> W[API-Based Analysis]
+    T --> X[AI-Assisted Evidence Analysis<br/>Using Gemma2:2b Model]
     
-    T --> X[Investigation Results]
-    U --> X
-    V --> X
-    W --> X
+    U --> Y[Investigation Results]
+    V --> Y
+    W --> Y
+    X --> Y
     
-    X --> Y{Continue Investigation}
-    Y -->|Yes| Z[Process More Evidence]
-    Y -->|No| AA[Export Results<br/>Generate Reports]
+    Y --> Z{Continue Investigation}
+    Z -->|Yes| AA[Process More Evidence]
+    Z -->|No| BB[Export Results<br/>Generate Reports]
     
-    Z --> U
-    AA --> BB[Cleanup Environment<br/>manage-osdfir.ps1 undeploy]
+    AA --> V
+    BB --> CC[Cleanup Environment<br/>manage-osdfir-lab.ps1 teardown-lab]
     
     subgraph "AI Integration Features"
-        W1[Automated Evidence Correlation]
-        W2[Forensic Artifact Analysis]
-        W3[Timeline Pattern Detection]
-        W4[IOC Identification]
-        W --> W1
-        W --> W2
-        W --> W3
-        W --> W4
+        X1[Timesketch NL2Q<br/>Natural Language to Query]
+        X2[Event Summarization<br/>AI-Powered Analysis]
+        X3[OpenRelik AI Workers<br/>Evidence Processing]
+        X4[Centralized AI Config<br/>Single YAML Management]
+        X --> X1
+        X --> X2
+        X --> X3
+        X --> X4
     end
     
     subgraph "Management Operations"
-        M1[Check Status<br/>manage-osdfir.ps1 status]
-        M2[View Logs<br/>manage-osdfir.ps1 logs]
-        M3[Get Credentials<br/>manage-osdfir.ps1 creds]
-        M4[Monitor AI<br/>manage-osdfir.ps1 ollama]
-        N --> M1
-        N --> M2
-        N --> M3
-        N --> M4
+        O1[Check Status<br/>manage-osdfir-lab.ps1 status]
+        O2[View Logs<br/>manage-osdfir-lab.ps1 logs]
+        O3[Get Credentials<br/>manage-osdfir-lab.ps1 creds]
+        O4[Monitor AI<br/>manage-osdfir-lab.ps1 ollama]
+        O5[Start Services<br/>manage-osdfir-lab.ps1 start]
+        O6[Stop Services<br/>manage-osdfir-lab.ps1 stop]
+        O --> O1
+        O --> O2
+        O --> O3
+        O --> O4
+        O --> O5
+        O --> O6
     end
     
     subgraph "Storage Management"
-        S1[Shared PVC: osdfirvolume<br/>Evidence Storage]
+        S1[Shared PVC: osdfirvolume<br/>Evidence & Case Data Storage]
         S2[Ollama Model Cache<br/>AI Model Storage]
+        S3[Terraform State<br/>Infrastructure State]
         G --> S1
-        H --> S2
+        I --> S2
+        G --> S3
     end 

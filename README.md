@@ -1,6 +1,8 @@
 # OSDFIR Lab
 
-A comprehensive lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
+A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
+
+- Source project: https://github.com/google/osdfir-infrastructure
 
 ## Overview
 
@@ -172,8 +174,8 @@ The script automatically detects and allocates:
 ## Useful Resources
 
 - **[Commands Reference](commands.md)** - Comprehensive command list
+- **[Deployment Workflow](docs/workflow.mmd)** - Visual deployment and usage flowchart
 - **[Project Notes](notes.md)** - Development guidelines and notes
-- **[Workflow Diagrams](docs/)** - Mermaid flowcharts
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
 ## Contributing
