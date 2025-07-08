@@ -14,15 +14,64 @@ desktop.ini
 # Reference repositories
 _reference_repos/
 
+# Archived/unused files
+unused/
+
 # Terraform
 **/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
 *.tfplan
+.terraform.lock.hcl
 
 # Environment files
 .env
+.env.local
+.env.production
+.env.development
 
 # Log files
-*.log 
+*.log
+
+# Kubernetes
+kubeconfig
+.kube/
+
+# Helm
+charts/*.tgz
+.helm/
+
+# Docker
+.docker/
+
+# PowerShell
+*.ps1.bak
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# Backup files
+*.bak
+*.backup
+
+# AI model cache (if downloaded locally)
+models/
+*.gguf
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Python cache (if any Python tools are added)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+
+# Node modules (if any frontend tools are added)
+node_modules/
+npm-debug.log 

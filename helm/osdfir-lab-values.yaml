@@ -1,6 +1,32 @@
+# OSDFIR Infrastructure Configuration
+# Centralized AI Model Configuration - Change models here only
+ai:
+  # Primary AI model configuration
+  model:
+    name: "gemma2:2b"
+    provider: "ollama"
+    server_url: "http://ollama.osdfir.svc.cluster.local:11434"
+    # Model parameters
+    max_input_tokens: 4096
+    max_output_tokens: 1024
+    temperature: 0.1
+    # Forensic-specific system prompt
+    system_prompt: |
+      You are a digital forensics AI assistant. Analyze the provided data with attention to:
+      - Suspicious patterns or anomalies
+      - Potential indicators of compromise
+      - Timeline relationships
+      - Data correlation opportunities
+      Provide clear, actionable insights for investigators.
+
+# Global configuration
 global:
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+  # Namespace (if different from default)
+  namespace: osdfir
   timesketch:
-    enabled: false
+    enabled: true   # Enable Timesketch with LLM features
   openrelik:
     enabled: true
   yeti:
@@ -15,7 +41,8 @@ timesketch:
     repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
     tag: "20250521" #20250408
   config:
-    existingConfigMap: ""
+    override: true  # Tell deployment to use existingConfigMap instead of default config
+    existingConfigMap: "osdfir-lab-timesketch-configs"  # Use our custom LLM-enabled configuration
     createUser: true
     oidc:
       enabled: false
@@ -153,34 +180,19 @@ openrelik:
       repository: prom/prometheus
       tag: "v3.4.2" #"v3.0.1"
 
-  # Ollama integration environment variables
-  extraEnv:
-    - name: OLLAMA_SERVER_URL
-      value: "http://ollama.osdfir.svc.cluster.local:11434"
-    - name: OLLAMA_DEFAULT_MODEL
-      value: "ai/gemma3n:4B-Q4_K_M"
-    - name: OPENRELIK_AI_ENABLED
-      value: "true"
-    - name: OPENRELIK_AI_PROVIDER
-      value: "ollama"
+  # Note: AI environment variables are configured per-worker to avoid conflicts
 
-  # LLM analyzer configuration
+  # LLM analyzer configuration (using OpenRelik chart's built-in configmap)
   config:
     analyzers:
       llm:
         provider: "ollama"
-        model: "ai/gemma3n:4B-Q4_K_M"
-        max_input_tokens: 4096  # Increased for better context
-        max_output_tokens: 1024
-        temperature: 0.1  # Lower temperature for more consistent forensic analysis
+        model: "gemma2:2b"
+        max_input_tokens: !!int 4096
+        max_output_tokens: !!int 2048
+        temperature: !!float 0.1
         ollama_server_url: "http://ollama.osdfir.svc.cluster.local:11434"
-        system_prompt: |
-          You are a digital forensics AI assistant. Analyze the provided data with attention to:
-          - Suspicious patterns or anomalies
-          - Potential indicators of compromise
-          - Timeline relationships
-          - Data correlation opportunities
-          Provide clear, actionable insights for investigators.
+        system_prompt: "You are a digital forensics expert assistant."
 
   # OpenRelik Workers
   workers:
@@ -276,23 +288,20 @@ openrelik:
       env: {}
       resources: {}
 
-    # Enhanced LLM worker with Gemma 3N model configuration
+    # LLM worker - environment variables automatically set by OpenRelik chart from config.analyzers.llm
+    # Additional env vars added to ensure chunker gets proper integer values
     - name: openrelik-worker-llm
       image: ghcr.io/openrelik/openrelik-worker-llm:latest
       command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-llm"
       env:
-        - name: OLLAMA_SERVER_URL
-          value: "http://ollama.osdfir.svc.cluster.local:11434"
-        - name: OLLAMA_DEFAULT_MODEL
-          value: "ai/gemma3n:4B-Q4_K_M"
+        - name: LLM_MAX_OUTPUT_TOKENS
+          value: "2048"
+        - name: LLM_TEMPERATURE
+          value: "0.1"
         - name: LLM_PROVIDER
           value: "ollama"
         - name: LLM_MODEL_NAME
-          value: "ai/gemma3n:4B-Q4_K_M"
-        - name: LLM_MAX_TOKENS
-          value: "4096"
-        - name: LLM_TEMPERATURE
-          value: "0.1"
+          value: "gemma2:2b"
       resources:
         requests:
           memory: 2Gi

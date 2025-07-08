@@ -66,16 +66,3 @@ resource "helm_release" "osdfir" {
     kubernetes_persistent_volume_claim.osdfirvolume,
   ]
 }
-
-# Parse the multi-document Ollama manifests file
-locals {
-  ollama_raw       = split("---", file("${path.module}/../manifests/ollama-deployment.yaml"))
-  ollama_docs      = [for doc in local.ollama_raw : trimspace(doc) if trimspace(doc) != ""]
-  ollama_manifests = [for doc in local.ollama_docs : yamldecode(doc)]
-}
-
-resource "kubernetes_manifest" "ollama" {
-  for_each = { for doc in local.ollama_manifests : "${doc.kind}_${doc.metadata.name}" => doc }
-  manifest = each.value
-  depends_on = [helm_release.osdfir]
-} 

@@ -1,0 +1,37 @@
+{{- if .Values.global.timesketch.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-timesketch-configs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "osdfir.labels" . | nindent 4 }}
+data:
+  timesketch.conf: |
+{{ .Files.Get "configs/timesketch.conf" | indent 4 }}
+
+    # LLM provider configs (dynamically generated with centralized AI model configuration)
+    LLM_PROVIDER_CONFIGS = {
+        # Configure LLM for Natural Language to Query (NL2Q) feature
+        'nl2q': {
+            'ollama': {
+                'server_url': '{{ .Values.ai.model.server_url }}',
+                'model': '{{ .Values.ai.model.name }}',
+            },
+        },
+        # Configure LLM for event summarization feature
+        'llm_summarize': {
+            'ollama': {
+                'server_url': '{{ .Values.ai.model.server_url }}',
+                'model': '{{ .Values.ai.model.name }}',
+            },
+        },
+        # Default LLM configuration for any other features
+        'default': {
+            'ollama': {
+                'server_url': '{{ .Values.ai.model.server_url }}',
+                'model': '{{ .Values.ai.model.name }}',
+            },
+        }
+    }
+{{- end }} 
