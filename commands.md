@@ -1,4 +1,4 @@
-# OSDFIR Minikube Commands Reference
+# OSDFIR Lab Commands Reference
 
 This document provides a comprehensive reference for managing the OSDFIR Minikube infrastructure with AI integration.
 
