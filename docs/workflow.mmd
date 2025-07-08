@@ -11,7 +11,7 @@ graph TD
     H --> I[Deploy Ollama AI Service<br/>Local AI Model Server]
     
     I --> J{Model Download Status}
-    J -->|In Progress| K[Wait for AI Model Download<br/>gemma2:2b (~1.6GB)]
+    J -->|In Progress| K["Wait for AI Model Download<br/>gemma2:2b (~1.6GB)"]
     K --> L[Model Downloaded<br/>Ollama Service Ready]
     J -->|Complete| L
     
