@@ -1,4 +1,4 @@
-# OSDFIR Minikube Management Script
+# OSDFIR Lab Management Script
 # Unified tool for managing OSDFIR deployment, services, and credentials on Minikube
 
 param(
@@ -42,7 +42,7 @@ function Show-Header {
 }
 
 function Show-Help {
-    Show-Header "OSDFIR Minikube Management Tool"
+    Show-Header "OSDFIR Lab Management Tool"
     Write-Host ""
     Write-Host "Usage: .\manage-osdfir-lab.ps1 [action] [options]" -ForegroundColor $Colors.Warning
     Write-Host ""
