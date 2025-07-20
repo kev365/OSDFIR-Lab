@@ -143,7 +143,7 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 
 ### AI Model Settings
 
-Edit `helm/osdfir-lab-values.yaml`:
+Edit `helm/configs/osdfir-lab-values.yaml`:
 
 ```yaml
 ai:
@@ -154,7 +154,7 @@ ai:
     max_input_tokens: 4096
 ```
 
-Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/osdfir-lab-values.yaml`
+Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/configs/osdfir-lab-values.yaml`
 
 ## Useful Resources
 
@@ -162,6 +162,12 @@ Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/os
 - **[Deployment Workflow](docs/workflow.mmd)** - Visual deployment and usage flowchart
 - **[Project Notes](notes.md)** - Development guidelines and notes
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
+
+## Known Issues
+- Still some issues coming up with partial re-deployments/installs, mostly with secrets. Currently full teardown and deploy works, just slower.
+- When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
+- Currently on version 2.2.9 of osdfir-infrastructure, looking at options for more dynamic updating.
+- LLM features not fully functional in this lab.
 
 ## Contributing
 
