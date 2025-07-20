@@ -134,7 +134,7 @@ helm status osdfir-lab -n osdfir
 helm get values osdfir-lab -n osdfir
 
 # Upgrade release with new values
-helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/osdfir-lab-values.yaml
+helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/configs/osdfir-lab-values.yaml
 
 # Uninstall release
 helm uninstall osdfir-lab --namespace osdfir
