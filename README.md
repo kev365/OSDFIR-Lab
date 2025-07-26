@@ -11,20 +11,18 @@ This repository provides a complete lab setup for OSDFIR tools running on Kubern
 ## Project Structure
 
 ```
-osdfir-minikube/
-├── helm/                    # OSDFIR Lab Helm chart with AI integration
+osdfir-lab/
+├── helm/                   # OSDFIR Lab Helm chart with AI integration
 ├── terraform/              # Infrastructure as Code (namespace, PVC, Helm release)
 ├── scripts/                # Management and utility scripts
 ├── docs/                   # Mermaid flowcharts and documentation
-├── unused/                 # Archived files for reference
-├── commands.md             # Useful command reference
-├── notes.md                # Project notes and documentation
-└── README.md               # This file
+├── configs/                # Custom configuration files for deployments
+└── mcp/                    # MCP services
 ```
 
 ## Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 backend enabled
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Kubernetes & WSL2 backend enabled
 - [Minikube](https://minikube.sigs.k8s.io/docs/start/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Helm](https://helm.sh/docs/intro/install/)
@@ -44,9 +42,9 @@ osdfir-minikube/
 - Storage: 100GB+ available SSD disk space
 
 **Software:**
-- Windows 11 Pro with WSL2 enabled
+- Windows 11 Pro with WSL2 enabled with Ubuntu
 - Docker Desktop for Windows
-  - Memory allocation: 8GB+ (configured in Docker Desktop settings)
+  - Memory allocation: 8GB+
   - WSL2 integration enabled
 - PowerShell 5.1+
 
@@ -91,7 +89,7 @@ This automatically handles:
 ### Cleanup
 
 ```powershell
-./scripts/manage-osdfir-lab.ps1 teardown-lab -Force
+./scripts/manage-osdfir-lab.ps1 teardown-lab
 ```
 
 ## Components
@@ -114,10 +112,12 @@ This automatically handles:
 
 ### AI Integration (Experimental)
 
-- **Ollama Server** - Local AI model hosting (`gemma2:2b`)
+- **Ollama Server** - Local AI model hosting (`tinyllama:latest`). *This is intentionally small for this project, feel free to adjust.
 - **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization
 - **OpenRelik AI Workers** - AI-powered evidence analysis
 - **Centralized AI Configuration** - Single YAML file for all AI settings
+- **Timesketch MCP Server** - in the works to add
+- **Yeti MCP Server** - in consideration to add
 
 **Current Status:** Basic integration working, expanding AI capabilities across tools.
 
@@ -148,10 +148,10 @@ Edit `helm/configs/osdfir-lab-values.yaml`:
 ```yaml
 ai:
   model:
-    name: "gemma2:2b"                    # Change model here
+    name: "tinyllama:latest"             # Change model here
     provider: "ollama"
     temperature: 0.1                     # Creativity level
-    max_input_tokens: 4096
+    max_input_tokens: 2048
 ```
 
 Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/configs/osdfir-lab-values.yaml`
