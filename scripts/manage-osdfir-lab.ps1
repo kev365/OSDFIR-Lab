@@ -683,7 +683,8 @@ function Start-Services {
     $services = @(
         @{Name="Timesketch"; Service="$ReleaseName-timesketch"; Port="5000"},
         @{Name="OpenRelik-UI"; Service="$ReleaseName-openrelik"; Port="8711"},
-        @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-api"; Port="8710"}
+        @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-api"; Port="8710"},
+        @{Name="Timesketch-MCP-Server"; Service="timesketch-mcp-server"; Port="8080"}
     )
     
     $availableServices = @()
@@ -1518,11 +1519,23 @@ switch ($Action.ToLower()) {
             Write-Host "Response:" -ForegroundColor $Colors.Success
             
             try {
-                $response = kubectl exec -n $Namespace $name -- ollama run $testModel "$($promptObj.Prompt)" 2>$null
-                if ($response) {
-                    Write-Host $response -ForegroundColor $Colors.Info
+                $promptResult = kubectl exec -n $Namespace $name -- ollama run $testModel "$($promptObj.Prompt)" 2>&1 | Out-String
+
+                if ($promptResult -and $promptResult.Trim().Length -gt 10) {
+                    # Extract the actual answer (last meaningful line)
+                    $lines = $promptResult -split "`n" | Where-Object { $_.Trim() -ne "" }
+                    $actualAnswer = $lines | Where-Object { $_ -notmatch "Thinking|\.\.\.done thinking" } | Select-Object -Last 1
+                    
+                    if ($actualAnswer -and $actualAnswer.Trim().Length -gt 5) {
+                        Write-Host "  [OK] AI model is responding to prompts" -ForegroundColor $Colors.Success
+                        Write-Host "  Sample response: $($actualAnswer.Trim())" -ForegroundColor $Colors.Gray
+                    } else {
+                        Write-Host "  [OK] AI model responding but verbose output detected" -ForegroundColor $Colors.Warning
+                        Write-Host "  Raw response length: $($promptResult.Length) characters" -ForegroundColor $Colors.Gray
+                    }
                 } else {
-                    Write-Host "No response received" -ForegroundColor $Colors.Warning
+                    Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
+                    Write-Host "  Debug: Response length = $($promptResult.Length)" -ForegroundColor $Colors.Gray
                 }
             } catch {
                 Write-Host "Error: $($_.Exception.Message)" -ForegroundColor $Colors.Error

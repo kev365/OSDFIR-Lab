@@ -1,0 +1,31 @@
+# OSDFIR Lab Configs Directory Reorganization
+
+## Project Overview
+Reorganize the OSDFIR Lab project structure by moving the `helm/configs` directory to the project root as `configs/` for better accessibility and organization.
+
+## Current State
+- Configuration files are located in `helm/configs/`
+- Contains two subdirectories: `helm/configs/data/` and main config file `helm/configs/osdfir-lab-values.yaml`
+- Referenced in `terraform/main.tf` for deployment configuration
+
+## Goals
+1. Move `helm/configs` to project root as `configs/`
+2. Update all path references in codebase
+3. Maintain all functionality and file integrity
+4. Improve project organization and accessibility
+
+## Requirements
+- Preserve all configuration files and directory structure
+- Update Terraform path references
+- Test deployment to ensure functionality is maintained
+- Commit changes to git properly
+
+## Files to Update
+- `terraform/main.tf` - Update 3 path references
+- Move directory structure from `helm/configs/` to `configs/`
+
+## Success Criteria
+- All config files successfully moved to new location
+- Terraform deployment works without errors
+- All path references updated correctly
+- No loss of configuration data 

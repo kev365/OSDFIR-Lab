@@ -21,6 +21,11 @@ global:
     ## @param global.yeti.enabled Enables the Yeti deployment (only used in the main OSDFIR Infrastructure Helm chart)
     ##
     enabled: true
+    ## @param global.yeti.apiKeySecret Existing secret containing Yeti API Key.
+    ## Please ensure that the Secret has been created then re-deploy the Helm chart when integrating Yeti with Timesketch
+    ## (e.g. kubectl create secret generic yeti-api-secret --from-literal=yeti-api=${YETI_API_KEY})
+    ##
+    apiKeySecret: ""
   openrelik:
     ## @param global.openrelik.enabled Enables the OpenRelik deployment (only used in the main OSDFIR Infrastructure Helm chart)
     ##
@@ -28,21 +33,20 @@ global:
   grr:
     ## @param global.grr.enabled Enables the GRR deployment (only used in the main OSDFIR Infrastructure Helm chart)
     ##
-    enabled: false
+    enabled: true
   hashr:
     ## @param global.hashr.enabled Enables the HashR deployment (only used in the main OSDFIR Infrastructure Helm chart)
     ##
     enabled: true
-  turbinia:
-    ## @param global.turbinia.enabled Enables the Turbinia deployment (only used in the main OSDFIR Infrastructure Helm chart)
-    ##
-    enabled: false
   ## Global ingress parameters used to configure Timesketch, Yeti under a loadbalancer
   ##
   ingress:
     ## @param global.ingress.enabled Enable the global loadbalancer for external access (only used in the main OSDFIR Infrastructure Helm chart)
     ##
     enabled: false
+    ## @param global.ingress.overrideIngressName Override the default loadbalancer name in case of multiple deployments
+    ##
+    overrideIngressName: ""
     ## @param global.ingress.timesketchHost Domain name Timesketch will be hosted under
     ##
     timesketchHost: ""
@@ -68,10 +72,13 @@ global:
     ## GCP ingress configuration
     ##
     gcp:
-      ## @param global.ingress.gcp.managedCertificates Enabled GCP managed certificates for your domain
+      ## @param global.ingress.gcp.managedCertificates Enable automatic creation of GCP managed certificates for your domain
       ## ref https://cloud.google.com/load-balancing/docs/ssl-certificates/google-managed-certs
       ##
       managedCertificates: false
+      ## @param global.ingress.gcp.existingManagedCertificates Specify an existing GCP certificate name
+      ##
+      existingManagedCertificates: ""
       ## @param global.ingress.gcp.staticIPName Name of the static IP address you reserved in GCP
       ## This is required when using "gce" in ingress.className
       ## ref https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address
@@ -81,113 +88,3 @@ global:
       ## ref https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address
       ##
       staticIPV6Name: ""
-
-timesketch:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
-    tag: latest
-  persistence:
-    enabled: true
-    existingPVC: osdfirvolume
-
-hashr:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/hashr/release/hashr
-    pullPolicy: IfNotPresent
-    tag: latest
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.2-alpine"
-
-yeti:
-  persistence:
-    enabled: true
-    existingPVC: osdfirvolume
-  frontend:
-    image:
-      repository: yetiplatform/yeti-frontend
-      pullPolicy: Always
-      tag: latest
-  api:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: Always
-      tag: latest
-  tasks:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: Always
-      tag: latest
-  arangodb:
-    image:
-      repository: arangodb
-      pullPolicy: Always
-      tag: latest
-
-openrelik:
-  persistence:
-    enabled: true
-    existingPVC: osdfirvolume
-  frontend:
-    image:
-      repository: ghcr.io/openrelik/openrelik-ui
-      pullPolicy: IfNotPresent
-      tag: "latest"
-  api:
-    image:
-      repository: ghcr.io/openrelik/openrelik-server
-      pullPolicy: IfNotPresent
-      tag: "latest"
-  mediator:
-    image:
-      repository: ghcr.io/openrelik/openrelik-mediator
-      pullPolicy: IfNotPresent
-      tag: "latest"
-  metrics:
-    image:
-      repository: ghcr.io/openrelik/openrelik-metrics
-      pullPolicy: IfNotPresent
-      tag: "latest"
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.2-alpine"
-  prometheus:
-    image:
-      repository: prom/prometheus
-      tag: "v3.0.1"
-  workers:
-    - name: openrelik-worker-analyzer-config
-      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:latest
-      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-analyzer-config"
-      env: {}
-      resources: {}
-
-    - name: openrelik-worker-plaso
-      image: ghcr.io/openrelik/openrelik-worker-plaso:latest
-      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
-      env: {}
-      resources: {}
-
-    - name: openrelik-worker-strings
-      image: ghcr.io/openrelik/openrelik-worker-strings:latest
-      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"
-      env: {}
-      resources: {}
-
-    - name: openrelik-worker-timesketch
-      image: ghcr.io/openrelik/openrelik-worker-timesketch:latest
-      command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
-      env: {}
-      resources: {}
-
-    - name: openrelik-worker-extraction
-      image: ghcr.io/openrelik/openrelik-worker-extraction@sha256:9e6a7d94e5af685be32b40e2be7c9ae6aaac77ab7d26bad7dd4c4dacd1f342d0
-      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
-      env: {}
-      resources: {}

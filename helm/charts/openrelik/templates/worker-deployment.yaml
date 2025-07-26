@@ -5,7 +5,7 @@ kind: Deployment
 metadata:
   name: {{ $.Release.Name }}-{{ .name }}
 spec:
-  replicas: 1
+  replicas: {{ .replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/component: worker
@@ -14,6 +14,10 @@ spec:
       labels:
         app.kubernetes.io/component: worker
     spec:
+      {{- if and .privileged $.Values.config.initWorkerNbd.enabled }}
+      initContainers:
+      {{- include "openrelik.initContainerWorker" $ | nindent 8 }}
+      {{- end }}
       hostNetwork: false
       hostIPC: false
       automountServiceAccountToken: false
@@ -22,6 +26,8 @@ spec:
           image: {{ .image | quote }}
           imagePullPolicy: "IfNotPresent"
           command: ["/bin/sh", "-c", "{{ .command }}"]
+          securityContext:
+            privileged: {{ .privileged }}
           env:
           {{- if and (eq .name "openrelik-worker-timesketch") $.Values.global.timesketch.enabled }}
             - name: TIMESKETCH_SERVER_URL
@@ -36,22 +42,6 @@ spec:
           {{- else if .env }}
             {{- toYaml .env | nindent 12 }} 
           {{- end }}
-          {{- if and (eq .name "openrelik-worker-llm") $.Values.config.analyzers }}
-            {{- if $.Values.config.analyzers.llm }}
-            {{- if $.Values.config.analyzers.llm.max_input_tokens }}
-            - name: LLM_MAX_INPUT_TOKENS
-              value: "{{ $.Values.config.analyzers.llm.max_input_tokens }}"
-            {{- end }}
-            {{- if $.Values.config.analyzers.llm.ollama_server_url }}
-            - name: OLLAMA_SERVER_URL
-              value: "{{ $.Values.config.analyzers.llm.ollama_server_url }}"
-            {{- end }}
-            {{- if $.Values.config.analyzers.llm.model }}
-            - name: OLLAMA_DEFAULT_MODEL
-              value: "{{ $.Values.config.analyzers.llm.model }}"
-            {{- end }}
-            {{- end }}
-          {{- end }}
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
@@ -60,9 +50,10 @@ spec:
           volumeMounts:
             - mountPath: /mnt/openrelikvolume
               name: openrelikvolume
-            {{- if $.Values.config.analyzers }}
-            - name: analyzer-config
-              mountPath: /usr/share/openrelik/data
+            {{- if .privileged }}
+            - mountPath: /dev
+              name: dev
+              readOnly: true
             {{- end }}
           {{- if .resources }}
           resources:
@@ -77,9 +68,18 @@ spec:
             claimName: {{ $.Release.Name }}-openrelikvolume-claim
             {{- end }}
             readOnly: false
-        {{- if $.Values.config.analyzers }}
-        - name: analyzer-config
-          configMap:
-            name: {{ $.Release.Name }}-worker-analyzer-config
+        {{- if .privileged }}
+        - name: dev
+          hostPath:
+            path: /dev
+        {{- if $.Values.config.initWorkerNbd.enabled }}
+        - name: modules
+          hostPath:
+            path: /lib/modules
+        {{- end }}
+        {{- end }}
+      nodeSelector:
+        {{- range $key, $value := .nodeSelector }}
+        {{ $key }}: "{{ $value }}"
         {{- end }}
 {{- end }}

@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-cache
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+  storageClassName: standard
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      initContainers:
+        - name: model-puller
+          image: ollama/ollama:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Checking if {{ .Values.ai.model.name }} model already exists..."
+              if [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/{{ .Values.ai.model.name | replace ":" "/" }} ]; then
+                echo "Model {{ .Values.ai.model.name }} already exists, skipping download"
+                exit 0
+              fi
+              
+              echo "Starting Ollama service..."
+              ollama serve &
+              OLLAMA_PID=$!
+              
+              echo "Waiting for Ollama to be ready..."
+              max_attempts=30
+              attempt=0
+              while [ $attempt -lt $max_attempts ]; do
+                if ollama list >/dev/null 2>&1; then
+                  echo "Ollama service is ready!"
+                  break
+                fi
+                echo "Waiting for Ollama... (attempt $((attempt + 1))/$max_attempts)"
+                sleep 5
+                attempt=$((attempt + 1))
+              done
+              
+              if [ $attempt -eq $max_attempts ]; then
+                echo "ERROR: Ollama service did not become ready after $((max_attempts * 5)) seconds"
+                kill $OLLAMA_PID 2>/dev/null || true
+                exit 1
+              fi
+              
+              echo "Pulling model {{ .Values.ai.model.name }}..."
+              ollama pull {{ .Values.ai.model.name }}
+              
+              echo "Model pull completed, stopping init service..."
+              kill $OLLAMA_PID
+              wait $OLLAMA_PID
+          volumeMounts:
+            - name: ollama-cache
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 11434
+          env:
+            - name: OLLAMA_KEEP_ALIVE
+              value: "24h"
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+          volumeMounts:
+            - name: ollama-cache
+              mountPath: /root/.ollama
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "3Gi"
+              cpu: "1"
+              ephemeral-storage: "1Gi"
+            limits:
+              memory: "6Gi"
+              cpu: "2"
+              ephemeral-storage: "2Gi"
+      volumes:
+        - name: ollama-cache
+          persistentVolumeClaim:
+            claimName: ollama-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: ollama
+  ports:
+    - protocol: TCP
+      port: 11434
+      targetPort: 11434
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-models-config
+  namespace: {{ .Release.Namespace }}
+data:
+  available-models.json: |
+    {
+      "models": [
+        {
+          "name": "{{ .Values.ai.model.name }}",
+          "display_name": "{{ .Values.ai.model.name | title }}",
+          "description": "{{ .Values.ai.model.name }} model for text generation and analysis",
+          "context_length": {{ .Values.ai.model.max_input_tokens }},
+          "capabilities": ["text-generation", "analysis", "forensics"]
+        }
+      ]
+    } 

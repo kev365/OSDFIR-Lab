@@ -1,0 +1,22 @@
+annotations:
+  category: Security
+  licenses: Apache-2.0
+apiVersion: v2
+appVersion: latest
+description: A Helm chart for GRR/Fleetspeak Kubernetes deployments.
+home: https://www.grr-response.com/
+icon: https://www.grr-response.com/images/favicons/favicon.ico
+keywords:
+- grr
+- dfir
+- analysis
+- forensics
+maintainers:
+- email: osdfir-maintainers@googlegroups.com
+  name: Open Source DFIR
+  url: https://github.com/google/osdfir-infrastructure
+name: grr
+sources:
+- https://github.com/google/grr
+- https://github.com/google/osdfir-infrastructure
+version: 2.2.0

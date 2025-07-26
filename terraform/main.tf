@@ -36,11 +36,11 @@ provider "helm" {
 resource "null_resource" "timesketch_configs" {
   # Recreate archive when any file in the data directory changes
   triggers = {
-    data_dir_hash = sha256(join("", [for f in fileset("${path.module}/../helm/configs/data", "**") : filesha256("${path.module}/../helm/configs/data/${f}")]))
+    data_dir_hash = sha256(join("", [for f in fileset("${path.module}/../configs/data", "**") : filesha256("${path.module}/../configs/data/${f}")]))
   }
 
   provisioner "local-exec" {
-    command     = "cd ../helm/configs/data; tar -czf ../../../terraform/ts-configs.tar.gz ."
+    command = "cd ../configs/data; tar -czf ../../configs/init-timesketch/ts-configs.tar.gz ."
     working_dir = path.module
     interpreter = ["powershell", "-Command"]
   }
@@ -48,7 +48,7 @@ resource "null_resource" "timesketch_configs" {
 
 # Read the created tar.gz file
 data "local_file" "timesketch_configs_tar" {
-  filename   = "${path.module}/ts-configs.tar.gz"
+  filename   = "${path.module}/../configs/init-timesketch/ts-configs.tar.gz"
   depends_on = [null_resource.timesketch_configs]
 }
 
@@ -70,7 +70,7 @@ resource "kubernetes_config_map" "timesketch_configs" {
   data = {
     "ts-configs.tgz.b64" = data.local_file.timesketch_configs_tar.content_base64
   }
-  
+
   depends_on = [kubernetes_namespace.osdfir, null_resource.timesketch_configs]
 }
 
@@ -98,7 +98,7 @@ resource "helm_release" "osdfir" {
   namespace  = kubernetes_namespace.osdfir.metadata[0].name
   values     = [
     file("${path.module}/../helm/values.yaml"),
-    file("${path.module}/../helm/configs/osdfir-lab-values.yaml"),
+    file("${path.module}/../configs/osdfir-lab-values.yaml"),
   ]
 
   # Configure Timesketch to use our ConfigMap

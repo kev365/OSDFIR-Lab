@@ -26,11 +26,11 @@ spec:
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           command: ["sh", "-c", "/docker-entrypoint.sh webserver"]
-          {{- if not .Release.IsUpgrade }}
+          {{- if and (not .Release.IsUpgrade) .Values.config.createUser }}
           lifecycle:
             postStart:
               exec:
-                command: ["sh", "-c", "poetry run python yetictl/cli.py create-user yeti $YETI_USER_PASSWORD --api_key $YETI_API_KEY --admin"]
+                command: ["sh", "-c", "uv run python yetictl/cli.py create-user yeti $YETI_USER_PASSWORD --admin"]
           {{- end }}
           securityContext:
             allowPrivilegeEscalation: false

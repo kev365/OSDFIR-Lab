@@ -1,15 +1,18 @@
 dependencies:
 - name: timesketch
   repository: file://charts/timesketch
-  version: 2.1.3
+  version: 2.2.0
 - name: yeti
   repository: file://charts/yeti
-  version: 2.1.0
+  version: 2.2.0
 - name: openrelik
   repository: file://charts/openrelik
-  version: 2.1.2
+  version: 2.1.4
+- name: grr
+  repository: file://charts/grr
+  version: 2.2.0
 - name: hashr
   repository: file://charts/hashr
   version: 2.0.0
-digest: sha256:70956b6ab6c15a02b882df3dfc97b5a4538702ac369c934c1888b64233d6bcf3
-generated: "2025-07-13T11:19:23.6611219-05:00"
+digest: sha256:5c04cb2bf6efe8b1d828809c88d6bdc4a8e294df2dc06085a0944565ebccedcf
+generated: "2025-07-14T14:37:17.025183-07:00"

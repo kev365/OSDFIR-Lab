@@ -1,0 +1,94 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Analyze Current Directory Structure",
+        "description": "Document the current structure of helm/configs/ and identify all files that need to be moved",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Review the contents of helm/configs/ directory including data/ subdirectory and osdfir-lab-values.yaml file. Document the exact structure to ensure nothing is lost during the move.",
+        "testStrategy": "Verify all files are identified and documented before proceeding with the move"
+      },
+      {
+        "id": "2",
+        "title": "Identify All Code References",
+        "description": "Find all references to helm/configs paths in the codebase that need updating",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "details": "Search through all files to find references to helm/configs. Based on analysis, the main references are in terraform/main.tf with 3 specific path references that need updating.",
+        "testStrategy": "Use grep and codebase search to ensure all references are found"
+      },
+      {
+        "id": "3",
+        "title": "Create New Directory Structure",
+        "description": "Create configs/ directory at project root and move all files from helm/configs/",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "1",
+          "2"
+        ],
+        "details": "Move helm/configs/ to configs/ at the project root. Preserve all subdirectory structure including data/ folder and all configuration files.",
+        "testStrategy": "Verify all files moved correctly and no files were lost or corrupted"
+      },
+      {
+        "id": "4",
+        "title": "Update Terraform Path References",
+        "description": "Update all path references in terraform/main.tf to point to new configs location",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "details": "Update 3 specific references in terraform/main.tf: fileset path, tar command path, and values file path. Change helm/configs references to configs.",
+        "testStrategy": "Run terraform validate to ensure syntax is correct"
+      },
+      {
+        "id": "5",
+        "title": "Test Deployment Functionality",
+        "description": "Test that the deployment still works correctly with the new directory structure",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "details": "Run terraform plan/apply to verify that the configuration files are properly accessed from the new location and deployment works as expected.",
+        "testStrategy": "Successful terraform deployment without errors and all pods running correctly"
+      },
+      {
+        "id": "6",
+        "title": "Update Git Tracking",
+        "description": "Properly stage the directory move and file changes for git commit",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "4"
+        ],
+        "details": "Remove old helm/configs from git tracking and add new configs/ directory. Update terraform/main.tf changes.",
+        "testStrategy": "Git status shows proper file moves and no missing files"
+      },
+      {
+        "id": "7",
+        "title": "Documentation Update",
+        "description": "Update any documentation that references the old configs location",
+        "status": "pending",
+        "priority": "low",
+        "dependencies": [
+          "5"
+        ],
+        "details": "Check README and other documentation for any references to helm/configs that should be updated to configs/.",
+        "testStrategy": "Search through all .md files to ensure no outdated references remain"
+      }
+    ],
+    "metadata": {
+      "createdAt": "2025-01-20T12:00:00Z",
+      "version": "1.0.0",
+      "description": "Tasks for reorganizing OSDFIR Lab configs directory structure"
+    }
+  }
+}
