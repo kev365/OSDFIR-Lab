@@ -3,7 +3,7 @@
 
 # OSDFIR Lab
 
-**Version:** 20240721
+**Version:** 20240727
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
