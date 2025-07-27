@@ -1,8 +1,8 @@
 
-![Version](https://img.shields.io/badge/version-20240721-orange) | 
-![GitHub release downloads](https://img.shields.io/github/downloads/kev365/OSDFIR-Lab/total) | 
-![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) | 
-![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) | 
+![Version](https://img.shields.io/badge/version-20240721-orange)   
+![GitHub release downloads](https://img.shields.io/github/downloads/kev365/OSDFIR-Lab/total)   
+![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social)   
+![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social)   
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 # OSDFIR Lab
