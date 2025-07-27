@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Local .terraform directories
 .terraform/
 
@@ -95,4 +94,3 @@ npm-debug.log
 
 # Generated Timesketch config tarball
 configs/init-timesketch/ts-configs.tar.gz
->>>>>>> mcp-test

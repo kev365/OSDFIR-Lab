@@ -1,4 +1,9 @@
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+![Version](https://img.shields.io/badge/version-20240721-orange)
+
 # OSDFIR Lab
+
+**Version:** 20240721
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -16,7 +21,6 @@ osdfir-lab/
 ├── configs/                # Custom configuration files for deployments
 ├── helm/                   # OSDFIR Lab Helm chart with AI integration
 ├── scripts/                # Management and utility scripts
-├── .taskmaster/            # Task management files for project development
 └── terraform/              # Infrastructure as Code (namespace, PVC, Helm release)
 ```
 
