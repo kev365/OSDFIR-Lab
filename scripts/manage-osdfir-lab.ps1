@@ -684,7 +684,7 @@ function Start-Services {
         @{Name="Timesketch"; Service="$ReleaseName-timesketch"; Port="5000"},
         @{Name="OpenRelik-UI"; Service="$ReleaseName-openrelik"; Port="8711"},
         @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-api"; Port="8710"},
-        @{Name="Timesketch-MCP-Server"; Service="timesketch-mcp-server"; Port="8080"}
+        @{Name="Timesketch-MCP-Server"; Service="timesketch-mcp-server"; Port="8081"}
     )
     
     $availableServices = @()

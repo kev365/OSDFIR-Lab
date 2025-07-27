@@ -1,0 +1,21 @@
+graph TD
+    A[Start] --> B{Run 'manage-osdfir-lab.ps1 deploy'};
+    B --> C[Check Prerequisites];
+    C --> D{Docker Desktop Running?};
+    D -- No --> E[Start Docker Desktop];
+    D -- Yes --> F[Start Minikube Cluster];
+    E --> F;
+    F --> G[Build MCP Server Image];
+    G --> H[Deploy with Terraform];
+    H --> I[Wait for Pods to be Ready];
+    I --> J[Start Port Forwarding];
+    J --> K[End];
+
+    subgraph "Terraform Actions"
+        H --> H1[Create Namespace];
+        H --> H2[Create PVC];
+        H --> H3[Deploy Helm Chart];
+    end
+
+    style A fill:#2ecc71,stroke:#333,stroke-width:2px
+    style K fill:#e74c3c,stroke:#333,stroke-width:2px

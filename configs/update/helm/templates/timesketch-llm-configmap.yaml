@@ -1,4 +1,4 @@
-{{- if .Values.timesketch.enabled -}}
+{{- if .Values.global.timesketch.enabled -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

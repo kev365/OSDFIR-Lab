@@ -9,11 +9,11 @@ ai:
     provider: "ollama"
     server_url: "http://ollama.osdfir.svc.cluster.local:11434"
     timeouts:
-      llm_request: 600        # Main LLM request timeout (seconds)
-      api_timeout: 600       # Timesketch API timeout (seconds) 
+      llm_request: 120        # Main LLM request timeout (seconds)
+      api_timeout: 120       # Timesketch API timeout (seconds) 
       http_connect: 20       # HTTP connection timeout
-      http_read: 600          # HTTP read timeout (should match llm_request)
-      warm_up: 600            # Model warm-up timeout
+      http_read: 120          # HTTP read timeout (should match llm_request)
+      warm_up: 120            # Model warm-up timeout
     max_input_tokens: 32768
     # max_output_tokens: 1024
     # temperature: 0.1
@@ -32,7 +32,7 @@ global:
   timesketch:
     enabled: true
   openrelik:
-    enabled: false  # off for testing 
+    enabled: true 
   yeti:
     enabled: false  # Not currently set up in the lab
   hashr:

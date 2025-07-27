@@ -1,0 +1,18 @@
+graph TD
+    A[Start: Run update-osdfir-lab.ps1] --> B{Forced?};
+    B -- No --> C[Prompt for Confirmation];
+    B -- Yes --> D{Backup Enabled?};
+    C --> D;
+
+    D -- Yes --> E[Create Project Backup];
+    D -- No --> F[Fetch Latest Release from GitHub API];
+    E --> F;
+
+    F --> G[Download Release Package];
+    G --> H[Clean Helm Directory];
+    H --> I[Extract New Charts to Helm Directory];
+    I --> J[Apply Custom Patches from 'configs/update'];
+    J --> K[End: Update Complete];
+
+    style A fill:#2ecc71,stroke:#333,stroke-width:2px
+    style K fill:#3498db,stroke:#333,stroke-width:2px

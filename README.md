@@ -12,12 +12,12 @@ This repository provides a complete lab setup for OSDFIR tools running on Kubern
 
 ```
 osdfir-lab/
-├── helm/                   # OSDFIR Lab Helm chart with AI integration
-├── terraform/              # Infrastructure as Code (namespace, PVC, Helm release)
-├── scripts/                # Management and utility scripts
-├── docs/                   # Mermaid flowcharts and documentation
+├── backups/                # Project backups created by the update script
 ├── configs/                # Custom configuration files for deployments
-└── mcp/                    # MCP services
+├── helm/                   # OSDFIR Lab Helm chart with AI integration
+├── scripts/                # Management and utility scripts
+├── .taskmaster/            # Task management files for project development
+└── terraform/              # Infrastructure as Code (namespace, PVC, Helm release)
 ```
 
 ## Prerequisites
@@ -116,7 +116,7 @@ This automatically handles:
 - **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization
 - **OpenRelik AI Workers** - AI-powered evidence analysis
 - **Centralized AI Configuration** - Single YAML file for all AI settings
-- **Timesketch MCP Server** - in the works to add
+- **Timesketch MCP Server** - Provides programmatic interaction with Timesketch.
 - **Yeti MCP Server** - in consideration to add
 
 **Current Status:** Basic integration working, expanding AI capabilities across tools.
@@ -158,15 +158,12 @@ Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/co
 
 ## Useful Resources
 
-- **[Commands Reference](commands.md)** - Comprehensive command list
-- **[Deployment Workflow](docs/workflow.mmd)** - Visual deployment and usage flowchart
-- **[Project Notes](notes.md)** - Development guidelines and notes
+- **[Updating the Lab](updating_osdfir_lab.md)** - Instructions for updating the lab components.
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
 ## Known Issues
 - Still some issues coming up with partial re-deployments/installs, mostly with secrets. Currently full teardown and deploy works, just slower.
 - When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
-- Currently on version 2.2.9 of osdfir-infrastructure, looking at options for more dynamic updating.
 - LLM features not fully functional in this lab.
 
 ## Contributing

@@ -7,7 +7,6 @@ helm\.helmignore
 helm\charts\yeti\.helmignore
 helm\charts\timesketch\.helmignore
 helm\charts\openrelik\.helmignore
-README.md
 terraform\terraform.tfstate.backup*
 helm\charts\hashr-2.0.0.tgz
 helm\charts\openrelik-2.1.2.tgz

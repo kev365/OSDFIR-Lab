@@ -85,10 +85,12 @@ spec:
           ports:
             - containerPort: 11434
           env:
-            - name: OLLAMA_KEEP_ALIVE
-              value: "24h"
             - name: OLLAMA_HOST
               value: "0.0.0.0:11434"
+            - name: OLLAMA_NUM_PARALLEL
+              value: "1"
+            - name: OLLAMA_KEEP_ALIVE
+              value: "5m"
           volumeMounts:
             - name: ollama-cache
               mountPath: /root/.ollama
@@ -106,13 +108,13 @@ spec:
             periodSeconds: 30
           resources:
             requests:
-              memory: "3Gi"
-              cpu: "1"
-              ephemeral-storage: "1Gi"
-            limits:
-              memory: "6Gi"
+              memory: "4Gi"
               cpu: "2"
               ephemeral-storage: "2Gi"
+            limits:
+              memory: "8Gi"
+              cpu: "3"
+              ephemeral-storage: "3Gi"
       volumes:
         - name: ollama-cache
           persistentVolumeClaim:

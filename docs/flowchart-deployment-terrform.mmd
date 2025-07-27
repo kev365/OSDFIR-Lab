@@ -1,0 +1,27 @@
+graph TD
+    subgraph "Phase 1: Initial Setup"
+        A[Terraform Apply] --> B(Create Namespace);
+        A --> C(Package Timesketch Configs);
+    end
+
+    subgraph "Phase 2: Core Infrastructure"
+        B --> D(Create PVC);
+        B --> E(Create ConfigMap for Timesketch);
+        C --> E;
+        D --> F(Deploy OSDFIR Helm Chart);
+        E --> F;
+    end
+
+    subgraph "Phase 3: MCP Server Deployment"
+        F -- Helm Release Creates Secret --> G(Read Timesketch Secret);
+        G --> H(Deploy MCP Server);
+        H --> I(Create MCP Service);
+    end
+    
+    subgraph "Result"
+        I --> J[Deployment Complete];
+    end
+
+    style A fill:#2ecc71,stroke:#333,stroke-width:2px
+    style J fill:#3498db,stroke:#333,stroke-width:2px
+    linkStyle 5 stroke:#ff9f43,stroke-width:2px,stroke-dasharray: 5 5;
