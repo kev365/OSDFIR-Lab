@@ -25,6 +25,7 @@ dependencies:
   version: 2.0.0
 description: A Helm chart for Open Source Digital Forensics Kubernetes deployments.
 home: https://github.com/google/osdfir-infrastructure
+icon: https://raw.githubusercontent.com/google/osdfir-infrastructure/main/docs/images/osdfir-logo.png
 keywords:
 - timesketch
 - yeti

@@ -1,0 +1,18 @@
+{{- if .Values.timesketch.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-timesketch-llm-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "timesketch.labels" . | nindent 4 }}
+data:
+  # AI Model Environment Variables for Timesketch
+  LLM_REQUEST_TIMEOUT: {{ .Values.ai.model.timeouts.llm_request | quote }}
+  API_TIMEOUT: {{ .Values.ai.model.timeouts.api_timeout | quote }}
+  HTTP_CONNECT_TIMEOUT: {{ .Values.ai.model.timeouts.http_connect | quote }}
+  HTTP_READ_TIMEOUT: {{ .Values.ai.model.timeouts.http_read | quote }}
+  WARM_UP_TIMEOUT: {{ .Values.ai.model.timeouts.warm_up | quote }}
+  OLLAMA_MODEL_NAME: {{ .Values.ai.model.name | quote }}
+  OLLAMA_SERVER_URL: {{ .Values.ai.model.server_url | quote }}
+{{- end }}

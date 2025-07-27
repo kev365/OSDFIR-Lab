@@ -5,16 +5,16 @@
 # and uses these values for model configuration
 ai:
   model:
-    name: "tinyllama:latest"
+    name: "qwen2.5:0.5b"
     provider: "ollama"
     server_url: "http://ollama.osdfir.svc.cluster.local:11434"
     timeouts:
-      llm_request: 120        # Main LLM request timeout (seconds)
-      api_timeout: 200       # Timesketch API timeout (seconds) 
+      llm_request: 600        # Main LLM request timeout (seconds)
+      api_timeout: 600       # Timesketch API timeout (seconds) 
       http_connect: 20       # HTTP connection timeout
-      http_read: 90          # HTTP read timeout (should match llm_request)
-      warm_up: 90            # Model warm-up timeout
-    # max_input_tokens: 4096
+      http_read: 600          # HTTP read timeout (should match llm_request)
+      warm_up: 600            # Model warm-up timeout
+    max_input_tokens: 32768
     # max_output_tokens: 1024
     # temperature: 0.1
     # Forensic-specific system prompt
@@ -142,7 +142,7 @@ openrelik:
     analyzers:
       llm:
         provider: "ollama"
-        model: "tinyllama:latest"
+        model: "qwen2.5:0.5b"
         #max_input_tokens: !!int 4096
         # max_output_tokens: !!int 2048
         # temperature: !!float 0.1
@@ -190,7 +190,7 @@ openrelik:
         - name: LLM_PROVIDER
           value: "ollama"
         - name: LLM_MODEL_NAME
-          value: "tinyllama:latest"
+          value: "qwen2.5:0.5b"
       resources:
         requests:
           memory: 2Gi
