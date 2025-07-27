@@ -116,14 +116,17 @@ This automatically handles:
 
 ### AI Integration (Experimental)
 
-- **Ollama Server** - Local AI model hosting (`tinyllama:latest`). *This is intentionally small for this project, feel free to adjust.
-- **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization
-- **OpenRelik AI Workers** - AI-powered evidence analysis
+- **Ollama Server** - Local AI model hosting (`qwen2.5:0.5b`). **NOTE: This is intentionally small for this project, feel free to adjust.**
+- **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (Working!)
+- **OpenRelik AI Workers** - AI-powered evidence analysis (In Progress)
 - **Centralized AI Configuration** - Single YAML file for all AI settings
-- **Timesketch MCP Server** - Provides programmatic interaction with Timesketch.
+- **Timesketch MCP Server** - Provides programmatic interaction with Timesketch. (Deployed and connects to LLM, needs usage info.)
 - **Yeti MCP Server** - in consideration to add
 
-**Current Status:** Basic integration working, expanding AI capabilities across tools.
+**Current Status:** 
+- Basic integration working, expanding AI capabilities across tools.
+- The model will be slow and may time out. However the purpose was deploy with something of reasonable size that is functional.
+- A larger model will be needed for best results and performance.
 
 ## Management
 
@@ -142,23 +145,6 @@ teardown-lab    # Complete cleanup
 ```
 
 For manual control or troubleshooting, see [commands.md](commands.md).
-
-## Advanced Configuration
-
-### AI Model Settings
-
-Edit `helm/configs/osdfir-lab-values.yaml`:
-
-```yaml
-ai:
-  model:
-    name: "tinyllama:latest"             # Change model here
-    provider: "ollama"
-    temperature: 0.1                     # Creativity level
-    max_input_tokens: 2048
-```
-
-Then update: `helm upgrade osdfir-lab ./helm --namespace osdfir --values helm/configs/osdfir-lab-values.yaml`
 
 ## Useful Resources
 
@@ -183,8 +169,13 @@ Otherwise, contribute to source projects!
 ## Disclaimer
 
 > **⚠️ Personal Test Lab Environment**  
-> This is a personal development and testing lab for experimenting with OSDFIR tools and AI integration. It's designed for learning, development, and fun - not for production use.
+> This is a personal development and testing lab for experimenting with OSDFIR tools and AI integration features. It's designed for learning, development, and fun - not for production use.
 
-## License
+## Author
 
-Apache License Version 2.0
+Kevin Stokes
+
+[Blog](https://dfir-kev.medium.com/) · [LinkedIn Profile](https://www.linkedin.com/in/dfir-kev/)
+
+[Mmm Coffee..](https://www.buymeacoffee.com/dfirkev) · [When Bored](https://www.teepublic.com/user/kstrike)
+
