@@ -1,0 +1,54 @@
+{{- if .Values.config.importers.targz.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-hashr-targz
+spec:
+  schedule: {{ .Values.config.importers.targz.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hashr-targz
+            image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            imagePullPolicy: {{ .Values.image.pullPolicy }}
+            args:
+              - --logtostderr=1
+              - -storage
+              - postgres
+              - -exporters
+              - postgres
+              - -postgres_host
+              - {{ printf "%s-hashr-postgres" (.Release.Name) }}
+              - -postgres_port
+              - '5432'
+              - -postgres_user
+              - postgres
+              - -postgres_password
+              - "$(POSTGRES_PASSWORD)"
+              - -postgres_db
+              - hashr
+              - -importers
+              - targz
+              - -targz_repo_path
+              - /mnt/hashrvolume/data/targz/
+            env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-hashr-secret
+                  key: postgres-user
+            volumeMounts:
+            - name: hashrvolume
+              mountPath: /mnt/hashrvolume/data
+          restartPolicy: Never
+          volumes:
+          - name: hashrvolume
+            persistentVolumeClaim:
+              claimName: {{ .Release.Name }}-hashrvolume-claim
+              readOnly: false
+{{- end }}

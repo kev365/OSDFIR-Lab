@@ -1,0 +1,22 @@
+annotations:
+  category: Security
+  licenses: Apache-2.0
+apiVersion: v2
+appVersion: latest
+description: A Helm chart for HashR Kubernetes deployments.
+home: https://github.com/google/hashr
+keywords:
+- hashr
+- dfir
+- analysis
+- security
+maintainers:
+- email: osdfir-maintainers@googlegroups.com
+  name: Open Source DFIR
+  url: https://github.com/google/osdfir-infrastructure
+name: hashr
+sources:
+- https://github.com/google/hashr
+- https://github.com/google/osdfir-infrastructure
+type: application
+version: 2.0.0

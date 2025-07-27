@@ -1,0 +1,47 @@
+annotations:
+  category: Security
+  licenses: Apache-2.0
+apiVersion: v2
+dependencies:
+- condition: global.timesketch.enabled
+  name: timesketch
+  repository: file://charts/timesketch
+  version: 2.2.0
+- condition: global.yeti.enabled
+  name: yeti
+  repository: file://charts/yeti
+  version: 2.2.0
+- condition: global.openrelik.enabled
+  name: openrelik
+  repository: file://charts/openrelik
+  version: 2.1.4
+- condition: global.grr.enabled
+  name: grr
+  repository: file://charts/grr
+  version: 2.2.0
+- condition: global.hashr.enabled
+  name: hashr
+  repository: file://charts/hashr
+  version: 2.0.0
+description: A Helm chart for Open Source Digital Forensics Kubernetes deployments.
+home: https://github.com/google/osdfir-infrastructure
+icon: https://raw.githubusercontent.com/google/osdfir-infrastructure/main/docs/images/osdfir-logo.png
+keywords:
+- timesketch
+- yeti
+- dfir
+- analysis
+- processing
+- security
+maintainers:
+- email: osdfir-maintainers@googlegroups.com
+  name: Open Source DFIR
+  url: https://github.com/google/osdfir-infrastructure
+name: osdfir-infrastructure
+sources:
+- https://github.com/google/grr
+- https://github.com/google/osdfir-infrastructure
+- https://github.com/google/timesketch
+- https://github.com/yeti-platform/yeti
+- https://openrelik.org/
+version: 2.4.0

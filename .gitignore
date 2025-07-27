@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Local .terraform directories
 .terraform/
 
@@ -35,3 +36,63 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+=======
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+*.ps1.bak
+*.tmp
+*.temp
+~*
+*.bak
+*.backup
+
+# Project folders
+.cursor
+.taskmaster
+backups
+scripts/dev
+commands.md
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform.lock.hcl
+
+# Kubernetes
+kubeconfig
+.kube/
+
+# Helm
+charts/*.tgz
+.helm/
+
+# Docker
+.docker/
+
+# AI model cache (if downloaded locally)
+models/
+*.gguf
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Python cache (if any Python tools are added)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+
+# Node modules (if any frontend tools are added)
+node_modules/
+npm-debug.log 
+
+# Generated Timesketch config tarball
+configs/init-timesketch/ts-configs.tar.gz
+>>>>>>> mcp-test

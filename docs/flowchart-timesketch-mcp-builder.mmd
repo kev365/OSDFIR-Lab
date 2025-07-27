@@ -1,0 +1,31 @@
+graph TD
+    subgraph Initialization
+        A[Start: Run build-timesketch-mcp.ps1] --> B{Minikube Flag?};
+    end
+
+    subgraph "Docker Desktop Build"
+        B -- No --> C[Confirm Build];
+        C --> D[Build Image in Docker Desktop];
+        D --> E[End: Build Complete];
+    end
+
+    subgraph "Minikube Build"
+        B -- Yes --> F{Minikube Running?};
+        F -- No --> G[Start Minikube];
+        F -- Yes --> H[Switch to Minikube Docker Context];
+        G --> H;
+        H --> I[Confirm Build];
+        I --> J[Build Image in Minikube];
+        J --> K{Deployment Exists?};
+        K -- Yes --> L[Update & Restart Deployment];
+        K -- No --> M[Restore Docker Context];
+        L --> M;
+        M --> N{Minikube Started by Script?};
+        N -- Yes --> O[Stop Minikube];
+        N -- No --> P[End: Build Complete];
+        O --> P;
+    end
+
+    style A fill:#2ecc71,stroke:#333,stroke-width:2px
+    style E fill:#3498db,stroke:#333,stroke-width:2px
+    style P fill:#3498db,stroke:#333,stroke-width:2px

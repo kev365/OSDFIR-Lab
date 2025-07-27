@@ -1,0 +1,22 @@
+annotations:
+  category: Security
+  licenses: Apache-2.0
+apiVersion: v2
+appVersion: "20240828"
+description: A Helm chart for Timesketch Kubernetes deployments.
+home: https://timesketch.org/
+icon: https://raw.githubusercontent.com/google/timesketch/master/timesketch/frontend-ng/dist/timesketch-color.png
+keywords:
+- timesketch
+- dfir
+- analysis
+- security
+maintainers:
+- email: osdfir-maintainers@googlegroups.com
+  name: Open Source DFIR
+  url: https://github.com/google/osdfir-infrastructure
+name: timesketch
+sources:
+- https://github.com/google/timesketch
+- https://github.com/google/osdfir-infrastructure
+version: 2.2.0
