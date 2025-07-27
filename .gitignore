@@ -50,6 +50,7 @@ desktop.ini
 # Project folders
 .cursor
 .taskmaster
+.taskmaster/
 backups
 scripts/dev
 commands.md
