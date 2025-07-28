@@ -155,10 +155,13 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 - **[Updating the Lab](updating_osdfir_lab.md)** - Instructions for updating the lab components.
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
-## Known Issues
-- Still some issues coming up with partial re-deployments/installs, mostly with secrets. Currently full teardown and deploy works, just slower.
+## Troubleshooting Tips
 - When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
-- LLM features not fully functional in this lab.
+- For more serious testing, connect to a stronger LLM
+
+## Known Issues / Troubleshooting Tips
+- Still some issues coming up with partial re-deployments/installs, mostly with secrets. Currently full teardown and deploy works, just slower.
+- LLM features not fully functional in this lab, with the default deployment several features work, but may timeout.
 
 ## Contributing
 
@@ -168,7 +171,7 @@ Otherwise, contribute to source projects!
 - https://github.com/google/osdfir-infrastructure
 - https://github.com/google/timesketch
 - https://github.com/openrelik
-
+- https://github.com/timesketch/timesketch-mcp-server
 
 ## Disclaimer
 
