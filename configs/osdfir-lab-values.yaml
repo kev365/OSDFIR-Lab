@@ -199,6 +199,12 @@ openrelik:
           memory: 4Gi
           cpu: 2
 
+    - name: openrelik-worker-kstrike
+      image: ghcr.io/kev365/openrelik-worker-kstrike:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-kstrike"
+      env: {}
+      resources: {}
+
 #    - name: openrelik-worker-strings
 #      image: ghcr.io/openrelik/openrelik-worker-strings:latest
 #      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"

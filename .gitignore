@@ -94,4 +94,4 @@ node_modules/
 npm-debug.log 
 
 # Generated Timesketch config tarball
-configs/init-timesketch/ts-configs.tar.gz
+ts-configs.tar.gz
