@@ -95,3 +95,5 @@ npm-debug.log
 
 # Generated Timesketch config tarball
 ts-configs.tar.gz
+helm-addons/files/*.tgz
+helm-addons/files/*.tar.gz

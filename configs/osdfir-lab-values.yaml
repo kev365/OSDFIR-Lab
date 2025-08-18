@@ -60,8 +60,10 @@ timesketch:
   image:
     repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
     pullPolicy: IfNotPresent
-    tag: "20250708"
+    tag: "20250807"
   config:
+    override: true
+    existingConfigMap: osdfir-lab-ts-configs
     createUser: true
     oidc:
       enabled: false

@@ -1,0 +1,38 @@
+name: build-ts-configs-b64
+
+on:
+  push:
+    branches: [ main, helm ]
+    paths:
+      - 'configs/timesketch/**'       # your overrides
+      - 'tools/build-ts-configs.sh'
+  workflow_dispatch:
+
+concurrency:
+  group: ts-configs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to commit the generated file back
+    env:
+      TS_REF: master
+      DFIQ_REF: main
+      CUSTOM_DIR: configs/timesketch
+      OUT_FILE: helm-addons/files/ts-configs.tgz.b64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build merged base64 payload
+        run: |
+          chmod +x tools/build-ts-configs.sh
+          ./tools/build-ts-configs.sh
+
+      - name: Commit updated ts-configs.tgz.b64
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: refresh ts-configs.tgz.b64 (TS=${{ env.TS_REF }}, DFIQ=${{ env.DFIQ_REF }})"
+          file_pattern: helm-addons/files/ts-configs.tgz.b64
