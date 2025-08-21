@@ -2,7 +2,7 @@ name: Build Timesketch MCP Server
 
 on:
   push:
-    branches: [ main ]
+    branches: [ helm ]
     paths:
       - 'configs/timesketch-mcp-server/**'
   pull_request:

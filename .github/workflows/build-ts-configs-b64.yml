@@ -2,7 +2,7 @@ name: build-ts-configs-b64
 
 on:
   push:
-    branches: [ main, helm ]
+    branches: [ helm ]
     paths:
       - 'configs/timesketch/**'       # your overrides
       - 'tools/build-ts-configs.sh'
