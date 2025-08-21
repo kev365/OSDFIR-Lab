@@ -898,10 +898,10 @@ function Start-FullDeployment {
     Start-MinikubeTunnel
     
      # Step 2.5: Build the MCP Server image
-     if (-not (New-MCPServerImage)) {
-        Write-Host "ERROR: MCP Server image build failed. Halting deployment." -ForegroundColor $Colors.Error
-        return
-    }
+    #if (-not (New-MCPServerImage)) {
+    #    Write-Host "ERROR: MCP Server image build failed. Halting deployment." -ForegroundColor $Colors.Error
+    #    return
+    #}
     
     # Step 3: Deploy with Terraform
     Write-Host ""
@@ -1369,35 +1369,35 @@ openrelik:
     Write-Host "Use .\manage-osdfir-lab.ps1 ollama to check AI model status" -ForegroundColor $Colors.Info
 }
 
-function New-MCPServerImage {
-    Show-Header "Building Timesketch MCP Server Image in Minikube"
+#function New-MCPServerImage {
+#    Show-Header "Building Timesketch MCP Server Image in Minikube"
     
-    $buildScriptPath = "$PSScriptRoot\build-timesketch-mcp.ps1"
+#    $buildScriptPath = "$PSScriptRoot\build-timesketch-mcp.ps1"
     
-    if (-not (Test-Path $buildScriptPath)) {
-        Write-Host "ERROR: Build script not found at: $buildScriptPath" -ForegroundColor $Colors.Error
-        return $false
-    }
+#    if (-not (Test-Path $buildScriptPath)) {
+#        Write-Host "ERROR: Build script not found at: $buildScriptPath" -ForegroundColor $Colors.Error
+#        return $false
+#    }
     
-    Write-Host "Executing build script with -Minikube and -Force flags..." -ForegroundColor $Colors.Info
-    Write-Host "This will build the image directly into Minikube's Docker daemon." -ForegroundColor $Colors.Warning
+#    Write-Host "Executing build script with -Minikube and -Force flags..." -ForegroundColor $Colors.Info
+#    Write-Host "This will build the image directly into Minikube's Docker daemon." -ForegroundColor $Colors.Warning
     
-    try {
-        # Execute the script and pass parameters, including the new switch.
-        & $buildScriptPath -Minikube -Force -CalledByManager
+#    try {
+#        # Execute the script and pass parameters, including the new switch.
+#        & $buildScriptPath -Minikube -Force -CalledByManager
         
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] MCP Server image built successfully into Minikube" -ForegroundColor $Colors.Success
-            return $true
-        } else {
-            Write-Host "[ERROR] Failed to build MCP Server image. Check the output above for errors." -ForegroundColor $Colors.Error
-            return $false
-        }
-    } catch {
-        Write-Host "[ERROR] An error occurred while running the build script: $($_.Exception.Message)" -ForegroundColor $Colors.Error
-        return $false
-    }
-}
+#        if ($LASTEXITCODE -eq 0) {
+#            Write-Host "[OK] MCP Server image built successfully into Minikube" -ForegroundColor $Colors.Success
+#            return $true
+#        } else {
+#            Write-Host "[ERROR] Failed to build MCP Server image. Check the output above for errors." -ForegroundColor $Colors.Error
+#            return $false
+#        }
+#    } catch {
+#        Write-Host "[ERROR] An error occurred while running the build script: $($_.Exception.Message)" -ForegroundColor $Colors.Error
+#        return $false
+#    }
+#}
 
 # Handle -h flag for help
 if ($h) {

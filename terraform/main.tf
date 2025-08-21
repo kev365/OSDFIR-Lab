@@ -8,11 +8,13 @@
   }
 }
 
+# Use the current kubectl context (which should be "osdfir")
 provider "kubernetes" {
   config_path    = pathexpand("~/.kube/config")
   config_context = "osdfir"
 }
 
+# Add this Helm provider configuration (from the article):
 provider "helm" {
   kubernetes = {
     config_path    = pathexpand("~/.kube/config")
@@ -48,20 +50,15 @@ resource "kubernetes_persistent_volume_claim" "osdfirvolume" {
     namespace = kubernetes_namespace.osdfir.metadata[0].name
   }
   spec {
-    access_modes = ["ReadWriteOnce"]
-    resources { requests = { storage = var.pvc_storage } }
+    access_modes       = ["ReadWriteOnce"]
     storage_class_name = var.storage_class_name
+    resources { requests = { storage = var.pvc_storage } }
   }
 }
 
 resource "null_resource" "helm_repo" {
-  provisioner "local-exec" {
-    command = "helm repo add osdfir-charts https://google.github.io/osdfir-infrastructure/"
-  }
-
-  provisioner "local-exec" {
-    command = "helm repo update"
-  }
+  provisioner "local-exec" { command = "helm repo add osdfir-charts https://google.github.io/osdfir-infrastructure/" }
+  provisioner "local-exec" { command = "helm repo update" }
 }
 
 # Helm release (pointing at your local chart directory "../helm")
@@ -73,12 +70,6 @@ resource "helm_release" "osdfir" {
   values = [
     file("${path.module}/../configs/osdfir-lab-values.yaml"),
   ]
-
-  # Tell the Timesketch chart to mount our ConfigMap at /init
-  set = [{
-    name  = "timesketch.config.existingConfigMap"
-    value = kubernetes_config_map.timesketch_configs.metadata[0].name
-  }]
 
   timeout = 600
   wait    = false

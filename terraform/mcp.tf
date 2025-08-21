@@ -1,17 +1,18 @@
 # Data source to read the Timesketch secret
 data "kubernetes_secret" "timesketch" {
+  count = var.deploy_mcp_server ? 1 : 0
   metadata {
     name      = "osdfir-lab-timesketch-secret"
-    namespace = "osdfir"
+    namespace = kubernetes_namespace.osdfir.metadata[0].name
   }
 }
 
+# Timesketch MCP Server deployment
 resource "kubernetes_deployment" "timesketch_mcp_server" {
-  depends_on = [helm_release.osdfir]
-
+  count = var.deploy_mcp_server ? 1 : 0
   metadata {
     name      = "timesketch-mcp-server"
-    namespace = "osdfir"
+    namespace = kubernetes_namespace.osdfir.metadata[0].name
     labels = {
       app = "timesketch-mcp-server"
     }
@@ -35,52 +36,72 @@ resource "kubernetes_deployment" "timesketch_mcp_server" {
 
       spec {
         container {
-          name              = "timesketch-mcp-server"
-          image             = "timesketch-mcp-server:latest"
-          image_pull_policy = "Never"
+          
+          image = "ghcr.io/${var.github_repository}/timesketch-mcp-server:latest"
+          name  = "timesketch-mcp-server"
+          image_pull_policy = "Always"  # or "IfNotPresent" if you prefer
           command = ["uv", "run", "python", "src/main.py", "--mcp-host", "0.0.0.0", "--mcp-port", "8081"]
 
           port {
             container_port = 8081
           }
 
-          # Timesketch connection environment variables
           env {
             name  = "TIMESKETCH_HOST"
             value = "osdfir-lab-timesketch"
           }
+
           env {
             name  = "TIMESKETCH_PORT"
-            value = "5000"
+            value = "443"
           }
+
           env {
-            name = "TIMESKETCH_USER"
+            name  = "TIMESKETCH_USERNAME"
             value_from {
               secret_key_ref {
-                name = data.kubernetes_secret.timesketch.metadata[0].name
-                key  = "timesketch-user"
+                name = "osdfir-lab-timesketch-secret"
+                key  = "username"
               }
             }
           }
+
           env {
-            name = "TIMESKETCH_PASSWORD"
+            name  = "TIMESKETCH_PASSWORD"
             value_from {
               secret_key_ref {
-                name = data.kubernetes_secret.timesketch.metadata[0].name
-                key  = "timesketch-user"
+                name = "osdfir-lab-timesketch-secret"
+                key  = "password"
               }
+            }
+          }
+
+          resources {
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+            requests = {
+              cpu    = "250m"
+              memory = "256Mi"
             }
           }
         }
       }
     }
   }
+
+  depends_on = [
+    helm_release.osdfir
+  ]
 }
 
+# Service for the MCP Server
 resource "kubernetes_service" "timesketch_mcp_server" {
+  count = var.deploy_mcp_server ? 1 : 0
   metadata {
     name      = "timesketch-mcp-server"
-    namespace = "osdfir"
+    namespace = kubernetes_namespace.osdfir.metadata[0].name
   }
 
   spec {

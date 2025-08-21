@@ -26,4 +26,17 @@ variable "helm_release_name" {
   description = "Name for the Helm release of OSDFIR Infrastructure"
   type        = string
   default     = "osdfir-lab"
+}
+
+# Control whether to deploy the Timesketch MCP Server
+variable "deploy_mcp_server" {
+  description = "Whether to deploy the Timesketch MCP Server"
+  type        = bool
+  default     = false  # false = disabled, true = enabled
+} 
+
+variable "github_repository" {
+  description = "GitHub repository name (e.g., 'kev365/OSDFIR-Lab')"
+  type        = string
+  default     = "kev365/OSDFIR-Lab"  # Replace with your actual repo
 } 
