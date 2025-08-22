@@ -65,6 +65,7 @@ resource "null_resource" "helm_repo" {
 resource "helm_release" "osdfir" {
   name      = var.helm_release_name
   chart     = "osdfir-charts/osdfir-infrastructure"
+  version   = var.osdfir_chart_version
   namespace = kubernetes_namespace.osdfir.metadata[0].name
   
   # Add this line to use your values file

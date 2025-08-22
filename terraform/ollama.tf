@@ -1,10 +1,3 @@
-# Control whether to deploy Ollama
-variable "deploy_ollama" {
-  description = "Whether to deploy the Ollama server"
-  type        = bool
-  default     = true  # false = disabled, true = enabled
-}
-
 # Read AI configuration from values file
 locals {
   values_yaml = yamldecode(file("${path.module}/../configs/osdfir-lab-values.yaml"))
@@ -62,44 +55,8 @@ resource "kubernetes_deployment" "ollama" {
           image_pull_policy = "IfNotPresent"
           
           command = ["/bin/bash", "-c"]
-          args = [<<-EOT
-            echo "Checking if qwen2.5:0.5b model already exists..."
-            if [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/qwen2.5/0.5b ]; then
-              echo "Model qwen2.5:0.5b already exists, skipping download"
-              exit 0
-            fi
-            
-            echo "Starting Ollama service..."
-            ollama serve &
-            OLLAMA_PID=$!
-            
-            echo "Waiting for Ollama to be ready..."
-            max_attempts=30
-            attempt=0
-            while [ $attempt -lt $max_attempts ]; do
-              if ollama list >/dev/null 2>&1; then
-                echo "Ollama service is ready!"
-                break
-              fi
-              echo "Waiting for Ollama... (attempt $((attempt + 1))/$max_attempts)"
-              sleep 5
-              attempt=$((attempt + 1))
-            done
-            
-            if [ $attempt -eq $max_attempts ]; then
-              echo "ERROR: Ollama service did not become ready after $((max_attempts * 5)) seconds"
-              kill $OLLAMA_PID 2>/dev/null || true
-              exit 1
-            fi
-            
-            echo "Pulling model qwen2.5:0.5b..."
-            ollama pull qwen2.5:0.5b
-            
-            echo "Model pull completed, stopping init service..."
-            kill $OLLAMA_PID
-            wait $OLLAMA_PID
-          EOT
-          ]
+          # Using a simpler script with proper escape sequences
+          args = ["#!/bin/bash\nset -e\necho 'Checking if model exists...'\nif [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/qwen2.5/0.5b ]; then\n  echo 'Model already exists, skipping download'\n  exit 0\nfi\necho 'Starting Ollama service...'\nollama serve &\nOLLAMA_PID=$!\necho 'Waiting for Ollama to be ready...'\nfor i in $(seq 1 30); do\n  if ollama list >/dev/null 2>&1; then\n    echo 'Ollama service is ready!'\n    break\n  fi\n  echo \"Waiting for Ollama... (attempt $i/30)\"\n  sleep 5\n  if [ $i -eq 30 ]; then\n    echo 'ERROR: Ollama service did not become ready'\n    kill $OLLAMA_PID 2>/dev/null || true\n    exit 1\n  fi\ndone\necho 'Pulling model qwen2.5:0.5b...'\nollama pull qwen2.5:0.5b\necho 'Model pull completed, stopping init service...'\nkill $OLLAMA_PID\nwait $OLLAMA_PID"]
           
           volume_mount {
             name       = "ollama-cache"

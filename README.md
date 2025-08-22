@@ -122,14 +122,13 @@ This automatically handles:
 - **Ollama Server** - Local AI model hosting (`qwen2.5:0.5b`). **NOTE: This is intentionally small for this project, feel free to adjust.**
 - **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (Working!)
 - **OpenRelik AI Workers** - AI-powered evidence analysis (In Progress)
-- **Centralized AI Configuration** - Single YAML file for all AI settings
 - **Timesketch MCP Server** - Prebuilt via GitHub Actions, deployable via Terraform toggle.
 - **Yeti MCP Server** - in consideration to add
 
 **Current Status:** 
 - Basic integration working, expanding AI capabilities across tools.
 - The model will be slow and may time out. However the purpose was deploy with something of reasonable size that is functional.
-- A larger model will be needed for best results and performance.
+- A larger model will be needed for better results and performance.
 
 ## Management
 
@@ -139,12 +138,12 @@ The unified management script handles all operations:
 ./scripts/manage-osdfir-lab.ps1 [action]
 
 # Key actions:
-deploy          # Full deployment
-status          # Check everything
-start/stop      # Service access
-creds           # Login credentials
-ollama          # AI model status
-teardown-lab    # Complete cleanup
+deploy            # Full deployment
+status            # Check everything
+start/stop        # Service access
+creds             # Login credentials
+ollama            # AI model status
+teardown-lab-all  # Complete cleanup
 ```
 
 For manual control or troubleshooting, see [commands.md](commands.md).
@@ -156,11 +155,25 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 
 ## Troubleshooting Tips
 - When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
+- Eventually, Terraform my timeout waiting on the pods to all start up, use command `kubectl get pods -n osdfir` to check status. Terraform timing out does not mean the deployment failed, simply that Terraform stopped waiting.
+- After initial deployment, if the Timesketch AI features warn that a provider is needed, you may need to wait and reload the browser to see if the settings will work.
 - For more serious testing, connect to a stronger LLM
 
 ## Known Issues / Troubleshooting Tips
-- Still some issues coming up with partial re-deployments/installs, mostly with secrets. Currently full teardown and deploy works, just slower.
+- Still some issues coming up with partial re-deployments/installs, mostly with secrets.
 - LLM features not fully functional in this lab, with the default deployment several features work, but may timeout.
+
+## To-Do List
+
+### Project Improvements
+- **Organization**: Refine project structure and code organization
+- **Standardization**: Create consistent patterns across configuration files
+- **Documentation**: Update docs and create comprehensive how-to guides
+- **Deployment**: Improve deployment process and error handling
+- **Pod Management**: Enhance methods to add/remove/modify pods
+- **Integration**: Complete Yeti and HashR integration setup
+- **External LLMs**: Determine settings for using LLMs outside of the pods
+- **OpenSearch Management**: Establish process for backing up/upgrading/scaling OpenSearch
 
 ## Contributing
 

@@ -26,7 +26,7 @@ ai:
       - Data correlation opportunities
       Provide clear, actionable insights for investigators.
 
-# Global configuration
+# Global deployment configuration
 global:
   namespace: osdfir # Kubernetes Namespace
   timesketch:
@@ -40,10 +40,8 @@ global:
   grr:
     enabled: false  # Not currently used in the lab
 
-  # Timesketch MCP Server Configuration
-  # To deploy the Timesketch MCP Server, set the deploy_mcp_server variable to true in the terraform variables.tf file
-  # To disable, set it to false
-  # Location: terraform\variables.tf
+  # Timesketch MCP Server deployment, enabled/disable here: terraform\variables.tf
+  # Ollama deployment, enabled/disable here: terraform\variables.tf
 
 # Global Security Settings
 securityContext:

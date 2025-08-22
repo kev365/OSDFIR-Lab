@@ -37,7 +37,7 @@ resource "kubernetes_deployment" "timesketch_mcp_server" {
       spec {
         container {
           
-          image = "ghcr.io/${var.github_repository}/timesketch-mcp-server:helm"
+          image = "ghcr.io/${var.github_repository}/timesketch-mcp-server:latest"
           name  = "timesketch-mcp-server"
           image_pull_policy = "Always"  # or "IfNotPresent" if you prefer
           command = ["uv", "run", "python", "src/main.py", "--mcp-host", "0.0.0.0", "--mcp-port", "8081"]
