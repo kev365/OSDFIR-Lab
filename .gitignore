@@ -53,7 +53,9 @@ desktop.ini
 .taskmaster/
 backups
 scripts/dev
+scripts/dev/
 commands.md
+.cursorignore
 
 # Terraform
 **/.terraform/
