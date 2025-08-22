@@ -32,7 +32,7 @@ global:
   timesketch:
     enabled: true
   openrelik:
-    enabled: false 
+    enabled: true 
   yeti:
     enabled: false  # Not currently set up in the lab
   hashr:
@@ -206,21 +206,15 @@ openrelik:
           memory: 4Gi
           cpu: 2
 
-    - name: openrelik-worker-kstrike
-      image: ghcr.io/kev365/openrelik-worker-kstrike:latest
-      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-kstrike"
+    - name: openrelik-worker-extraction
+      image: ghcr.io/openrelik/openrelik-worker-extraction@sha256:05c0a93d2449888919a6f9aa09e2c30be5e214578c2c9c3c823d4a12b573de6e
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
       env: {}
       resources: {}
 
 #    - name: openrelik-worker-strings
 #      image: ghcr.io/openrelik/openrelik-worker-strings:latest
 #      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"
-#      env: {}
-#      resources: {}
-
-#    - name: openrelik-worker-extraction
-#      image: ghcr.io/openrelik/openrelik-worker-extraction@sha256:05c0a93d2449888919a6f9aa09e2c30be5e214578c2c9c3c823d4a12b573de6e
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
 #      env: {}
 #      resources: {}
 

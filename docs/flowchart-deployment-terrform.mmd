@@ -12,14 +12,16 @@ graph TD
         E --> F;
     end
 
-    subgraph "Phase 3: MCP Server Deployment"
+    subgraph "Phase 3: MCP Server Deployment (toggle)"
         F -- Helm Release Creates Secret --> G(Read Timesketch Secret);
-        G --> H(Deploy MCP Server);
-        H --> I(Create MCP Service);
+        G --> H{deploy_mcp_server?};
+        H -- true --> I(Deploy MCP Server from GHCR);
+        I --> J(Create MCP Service);
+        H -- false --> J;
     end
     
     subgraph "Result"
-        I --> J[Deployment Complete];
+        J --> K[Deployment Complete];
     end
 
     style A fill:#2ecc71,stroke:#333,stroke-width:2px

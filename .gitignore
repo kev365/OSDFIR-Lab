@@ -62,6 +62,7 @@ commands.md
 *.tfvars
 *.tfplan
 .terraform.lock.hcl
+crash.log
 
 # Kubernetes
 kubeconfig
@@ -88,6 +89,8 @@ __pycache__/
 *.pyd
 .Python
 pip-log.txt
+.venv/
+venv/
 
 # Node modules (if any frontend tools are added)
 node_modules/

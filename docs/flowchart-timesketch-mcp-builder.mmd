@@ -1,16 +1,16 @@
 graph TD
     subgraph Initialization
-        A[Start: Run build-timesketch-mcp.ps1] --> B{Minikube Flag?};
+        A[Start: GH Action build] --> B[Build & Push to GHCR];
     end
 
-    subgraph "Docker Desktop Build"
-        B -- No --> C[Confirm Build];
-        C --> D[Build Image in Docker Desktop];
-        D --> E[End: Build Complete];
+    subgraph "Local (legacy manual build)"
+        B -. optional .-> C[build-timesketch-mcp.ps1];
+        C --> D[Build Image locally];
+        D --> E[Push/Load Image];
     end
 
-    subgraph "Minikube Build"
-        B -- Yes --> F{Minikube Running?};
+    subgraph "Minikube Build (legacy)"
+        C -- minikube flag --> F{Minikube Running?};
         F -- No --> G[Start Minikube];
         F -- Yes --> H[Switch to Minikube Docker Context];
         G --> H;

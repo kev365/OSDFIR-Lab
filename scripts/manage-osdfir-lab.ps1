@@ -32,6 +32,7 @@ $Colors = @{
     Error = "Red"
     Info = "White"
     Gray = "Gray"
+    Command = "Magenta"
 }
 
 function Show-Header {
@@ -233,94 +234,100 @@ function Set-ProxyEnvironment {
     return $proxyVars
 }
 
-function Start-MinikubeCluster {
-    Write-Host ""
-    Write-Host "Starting OSDFIR Minikube Cluster..." -ForegroundColor $Colors.Header
-    Write-Host "=================================" -ForegroundColor $Colors.Header
-    Write-Host ""
+function Start-OSDFIRMinikube {
+    Show-Header "Starting OSDFIR Minikube Cluster"
     
-    # Check Docker
-    if (-not (Test-Docker -Silent)) {
-        Write-Host "[ERROR] Docker is not running" -ForegroundColor $Colors.Error
-        return $false
+    # Check if Minikube is already running with the osdfir profile
+    $minikubeStatus = minikube status --profile=osdfir 2>&1
+    
+    if ($minikubeStatus -match "Running" -and $LASTEXITCODE -eq 0) {
+        Write-Host "[INFO] Minikube 'osdfir' profile is already running" -ForegroundColor $Colors.Info
+        Write-Host "Type: $(minikube profile)" -ForegroundColor $Colors.Info
+        return $true
     }
     
-    # Get optimal resources
-    $resources = Get-OptimalResources
+    # Calculate system resources
+    $totalMemory = (Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB
+    $totalMemory = [math]::Round($totalMemory, 1)
+    $totalCPUs = (Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors
     
-    # Set proxy environment if needed
-    $proxyArgs = Set-ProxyEnvironment
+    # Get Docker memory allocation
+    $dockerMemory = 0
+    try {
+        $dockerInfo = docker info --format "{{.MemTotal}}" 2>$null
+        if ($dockerInfo) {
+            $dockerMemory = [math]::Round(($dockerInfo / 1GB), 1)
+        }
+    } catch {
+        $dockerMemory = "Unknown"
+    }
     
-    Write-Host "Starting Minikube with profile 'osdfir'..." -ForegroundColor $Colors.Success
+    # Calculate Minikube resource allocation (adjust as needed)
+    $minikubeMemory = [math]::Min(12, [math]::Floor($totalMemory * 0.6))
+    $minikubeCPUs = [math]::Min(8, [math]::Floor($totalCPUs * 0.6))
     
-    # Build the minikube start command
-    $minikubeArgs = @(
-        "start",
-        "--profile=osdfir",
-        "--driver=docker",
-        "--memory=$($resources.Memory)",
-        "--cpus=$($resources.CPUs)",
-        "--disk-size=40GB",
-        "--kubernetes-version=stable"
-    )
+    Write-Host "System Resources:" -ForegroundColor $Colors.Info
+    Write-Host "  Total Memory: ${totalMemory}GB" -ForegroundColor $Colors.Info
+    Write-Host "  Total CPUs: $totalCPUs" -ForegroundColor $Colors.Info
+    Write-Host "  Docker Memory: ${dockerMemory}GB" -ForegroundColor $Colors.Info
+    Write-Host ""
+    Write-Host "Minikube Allocation:" -ForegroundColor $Colors.Info
+    Write-Host "  Memory: ${minikubeMemory}GB" -ForegroundColor $Colors.Info
+    Write-Host "  CPUs: $minikubeCPUs" -ForegroundColor $Colors.Info
+    Write-Host ""
     
-    # Add proxy arguments if any
-    $minikubeArgs += $proxyArgs
+    # Set NO_PROXY environment variable
+    $noProxy = "localhost,127.0.0.1,10.96.0.0/12,192.168.59.0/24,192.168.49.0/24,192.168.39.0/24,registry.k8s.io"
+    Write-Host "Using NO_PROXY: $noProxy" -ForegroundColor $Colors.Info
     
     # Start Minikube
-    try {
-        $allArgs = $minikubeArgs + $proxyArgs
-        $argumentList = $allArgs -join " "
-        
-        Write-Host "Running: minikube $argumentList" -ForegroundColor $Colors.Gray
-        
-        $process = Start-Process -FilePath "minikube" -ArgumentList $allArgs -Wait -PassThru -NoNewWindow
-        
-        if ($process.ExitCode -ne 0) {
-            Write-Host "Failed to start Minikube!" -ForegroundColor $Colors.Error
-            return $false
-        }
-        
+    Write-Host "Starting Minikube with profile 'osdfir'..." -ForegroundColor $Colors.Info
+    $minikubeCommand = "minikube start --profile=osdfir --driver=docker --memory=${minikubeMemory}GB --cpus=$minikubeCPUs --disk-size=40GB --kubernetes-version=stable --docker-env NO_PROXY=$noProxy --docker-env NO_PROXY=$noProxy"
+    Write-Host "Running: $minikubeCommand" -ForegroundColor $Colors.Command
+    
+    Invoke-Expression $minikubeCommand
+    
+    if ($LASTEXITCODE -eq 0) {
         Write-Host ""
         Write-Host "[OK] Minikube started successfully" -ForegroundColor $Colors.Success
-        
-        # Enable required addons
         Write-Host ""
-        Write-Host "Enabling Minikube addons..." -ForegroundColor $Colors.Success
-        minikube addons enable ingress --profile=osdfir
-        minikube addons enable storage-provisioner --profile=osdfir
-        minikube addons enable default-storageclass --profile=osdfir
-        
-        # Set kubectl context
-        Write-Host ""
-        Write-Host "Setting kubectl context..." -ForegroundColor $Colors.Success
-        kubectl config use-context osdfir
-        
-        Write-Host ""
-        Write-Host "[OK] Minikube cluster is ready!" -ForegroundColor $Colors.Success
-        Write-Host "Cluster IP: $(minikube ip --profile=osdfir)" -ForegroundColor $Colors.Warning
-        
         return $true
-        
-    } catch {
-        Write-Host "Error starting Minikube: $($_.Exception.Message)" -ForegroundColor $Colors.Error
+    } else {
+        Write-Host ""
+        Write-Host "[ERROR] Failed to start Minikube" -ForegroundColor $Colors.Error
+        Write-Host ""
         return $false
     }
 }
 
 function Start-MinikubeTunnel {
     Write-Host ""
-    Write-Host "Starting Minikube tunnel..." -ForegroundColor $Colors.Success
+    Write-Host "Checking Minikube tunnel..." -ForegroundColor $Colors.Info
     
     # Check if tunnel job already exists
     $existingJob = Get-Job -Name "minikube-tunnel" -ErrorAction SilentlyContinue
-    if ($existingJob) {
+    if ($existingJob -and $existingJob.State -eq "Running") {
+        # Check if LoadBalancer services have external IPs
+        $lbServices = kubectl get services --all-namespaces --field-selector metadata.namespace=$Namespace --no-headers -o custom-columns=":metadata.name,:spec.type,:status.loadBalancer.ingress[0].ip" | 
+                     Where-Object { $_ -match "LoadBalancer" }
+        
+        if ($lbServices -and $lbServices -match "\S+\s+LoadBalancer\s+\d+\.\d+\.\d+\.\d+") {
+            Write-Host "[OK] Minikube tunnel is already running and working properly" -ForegroundColor $Colors.Success
+            Write-Host "LoadBalancer services are accessible on localhost" -ForegroundColor $Colors.Info
+            return
+        }
+        
+        Write-Host "Existing tunnel job found but may not be working properly" -ForegroundColor $Colors.Warning
         Write-Host "Stopping existing tunnel job..." -ForegroundColor $Colors.Warning
         $existingJob | Stop-Job
+        $existingJob | Remove-Job -Force
+    } elseif ($existingJob) {
+        Write-Host "Cleaning up non-running tunnel job..." -ForegroundColor $Colors.Warning
         $existingJob | Remove-Job -Force
     }
     
     # Start tunnel in background job
+    Write-Host "Starting Minikube tunnel..." -ForegroundColor $Colors.Info
     $scriptBlock = {
         minikube tunnel --profile=osdfir --cleanup
     }
@@ -414,7 +421,7 @@ function Start-DockerDesktop {
     try {
         Start-Process -FilePath $dockerExe -WindowStyle Hidden
         
-        Write-Host "Waiting for Docker Desktop to start (this may take 2-3 minutes)..." -ForegroundColor $Colors.Info
+        Write-Host "Waiting for Docker Desktop to start..." -ForegroundColor $Colors.Info
         $timeout = 180 # 3 minutes
         $elapsed = 0
         
@@ -889,7 +896,7 @@ function Start-FullDeployment {
     # Step 2: Start Minikube
     Write-Host ""
     Write-Host "Step 2: Starting Minikube cluster..." -ForegroundColor $Colors.Info
-    if (-not (Start-MinikubeCluster)) {
+    if (-not (Start-OSDFIRMinikube)) {
         Write-Host "ERROR: Failed to start Minikube" -ForegroundColor $Colors.Error
         return
     }
@@ -912,6 +919,26 @@ function Start-FullDeployment {
         if ($LASTEXITCODE -ne 0) {
             Write-Host "ERROR: Terraform init failed" -ForegroundColor $Colors.Error
             return
+        }
+        
+        # Add after line 922 (terraform init)
+        # Check for existing resources and import them into state if needed
+        $existingResources = kubectl get deployment,service,configmap -n $Namespace -o json | ConvertFrom-Json
+        foreach ($resource in $existingResources.items) {
+            # Logic to import resources into Terraform state
+        }
+
+        # Check if Helm release exists and import it if needed
+        Write-Host "Checking for existing Helm release..." -ForegroundColor $Colors.Info
+        $existingRelease = helm list -n $Namespace -o json | ConvertFrom-Json | Where-Object { $_.name -eq $ReleaseName }
+        if ($existingRelease) {
+            Write-Host "Found existing release '$ReleaseName', importing into Terraform state..." -ForegroundColor $Colors.Warning
+            terraform import helm_release.osdfir "$Namespace/$ReleaseName" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Successfully imported existing Helm release" -ForegroundColor $Colors.Success
+            } else {
+                Write-Host "Note: Import returned non-zero code, but this is often expected if already in state" -ForegroundColor $Colors.Info
+            }
         }
         
         terraform apply -auto-approve

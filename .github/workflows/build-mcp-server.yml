@@ -2,11 +2,11 @@ name: Build Timesketch MCP Server
 
 on:
   push:
-    branches: [ helm ]
+    branches: [ main ]
     paths:
       - 'configs/timesketch-mcp-server/**'
   pull_request:
-    branches: [ helm ]
+    branches: [ main ]
     paths:
       - 'configs/timesketch-mcp-server/**'
   workflow_dispatch:  # Allow manual triggers

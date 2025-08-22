@@ -61,22 +61,18 @@ resource "null_resource" "helm_repo" {
   provisioner "local-exec" { command = "helm repo update" }
 }
 
-# Helm release (pointing at your local chart directory "../helm")
+# First deploy the main OSDFIR infrastructure
 resource "helm_release" "osdfir" {
   name      = var.helm_release_name
   chart     = "osdfir-charts/osdfir-infrastructure"
   namespace = kubernetes_namespace.osdfir.metadata[0].name
-
-  values = [
-    file("${path.module}/../configs/osdfir-lab-values.yaml"),
-  ]
-
-  timeout = 600
-  wait    = false
-
+  
+  # Add this line to use your values file
+  values = [file("${path.module}/../configs/osdfir-lab-values.yaml")]
+  
   depends_on = [
-    kubernetes_persistent_volume_claim.osdfirvolume,
-    kubernetes_config_map.timesketch_configs,
     null_resource.helm_repo,
+    kubernetes_namespace.osdfir,
+    kubernetes_config_map.timesketch_configs
   ]
 }

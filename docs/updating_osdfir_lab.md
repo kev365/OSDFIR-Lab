@@ -38,4 +38,5 @@ The script performs the following steps:
 1.  **Backup**: Creates a `.zip` backup of the entire project directory (except for the `backups` folder itself) and stores it in the `backups/` directory. This can be skipped with the `-NoBackup` flag.
 2.  **Fetch Latest Release**: Connects to the GitHub API to find the latest release of the `google/osdfir-infrastructure` repository.
 3.  **Download & Extract**: Downloads the latest release package (`.tgz`), clears the contents of the local `helm/` directory, and extracts the new charts into it.
-4.  **Apply Custom Patches**: Copies any custom configuration files from `configs/update/` into the project, overwriting the newly updated files. This ensures your local modifications are preserved.
+4.  **helm-addons**: Leave templates in `helm-addons/` untouched; use values in `configs/osdfir-lab-values.yaml` to customize behavior.
+5.  **Apply Custom Patches**: Copies any custom configuration files from `configs/update/` into the project, overwriting the newly updated files. This ensures your local modifications are preserved.

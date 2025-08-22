@@ -5,8 +5,9 @@ graph TD
     D -- No --> E[Start Docker Desktop];
     D -- Yes --> F[Start Minikube Cluster];
     E --> F;
-    F --> G[Build MCP Server Image];
-    G --> H[Deploy with Terraform];
+    F --> G{Deploy MCP Server?};
+    G -- No --> H[Deploy with Terraform];
+    G -- Yes --> H[Deploy with Terraform (uses GHCR image)];
     H --> I[Wait for Pods to be Ready];
     I --> J[Start Port Forwarding];
     J --> K[End];

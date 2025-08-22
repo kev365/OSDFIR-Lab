@@ -1,8 +1,11 @@
+{{- $releaseName := .Release.Name -}}
+{{- $releaseNamespace := .Release.Namespace -}}
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ollama-cache
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $releaseNamespace }}
 spec:
   accessModes:
     - ReadWriteOnce
@@ -15,7 +18,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ollama
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $releaseNamespace }}
 spec:
   replicas: 1
   selector:
@@ -33,9 +36,9 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              echo "Checking if {{ .Values.ai.model.name }} model already exists..."
-              if [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/{{ .Values.ai.model.name | replace ":" "/" }} ]; then
-                echo "Model {{ .Values.ai.model.name }} already exists, skipping download"
+              echo "Checking if qwen2.5:0.5b model already exists..."
+              if [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/qwen2.5/0.5b ]; then
+                echo "Model qwen2.5:0.5b already exists, skipping download"
                 exit 0
               fi
               
@@ -62,8 +65,8 @@ spec:
                 exit 1
               fi
               
-              echo "Pulling model {{ .Values.ai.model.name }}..."
-              ollama pull {{ .Values.ai.model.name }}
+              echo "Pulling model qwen2.5:0.5b..."
+              ollama pull qwen2.5:0.5b
               
               echo "Model pull completed, stopping init service..."
               kill $OLLAMA_PID
@@ -124,7 +127,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ollama
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $releaseNamespace }}
 spec:
   selector:
     app: ollama
@@ -137,7 +140,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ollama-models-config
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ $releaseNamespace }}
 data:
   available-models.json: |
     {

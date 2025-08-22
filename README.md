@@ -1,5 +1,5 @@
 
-![Version](https://img.shields.io/badge/version-20250727-orange) 
+![Version](https://img.shields.io/badge/version-20250822-orange) 
 ![GitHub release downloads](https://img.shields.io/github/downloads/kev365/OSDFIR-Lab/total) 
 ![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) 
 ![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) 
@@ -7,7 +7,7 @@
 
 # OSDFIR Lab
 
-**Version:** 20250727
+**Version:** 20250822
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -22,10 +22,10 @@ This repository provides a complete lab setup for OSDFIR tools running on Kubern
 ```
 osdfir-lab/
 ├── backups/                # Project backups created by the update script
-├── configs/                # Custom configuration files for deployments
-├── helm/                   # OSDFIR Lab Helm chart with AI integration
+├── configs/                # Custom configuration files (Timesketch, values, etc.)
+├── helm-addons/            # Add-on Helm templates (Ollama, Timesketch LLM config)
 ├── scripts/                # Management and utility scripts
-└── terraform/              # Infrastructure as Code (namespace, PVC, Helm release)
+└── terraform/              # IaC: namespace, PVCs, Helm release, toggles
 ```
 
 ## Prerequisites
@@ -46,7 +46,7 @@ osdfir-lab/
 
 **Hardware:**
 - CPU: Modern multi-core processor (8+ logical cores recommended)
-- RAM: 32GB+ system memory
+- RAM: 16GB+ system memory
 - Storage: 100GB+ available SSD disk space
 
 **Software:**
@@ -113,7 +113,7 @@ This automatically handles:
 
 - **Minikube** - Local Kubernetes cluster
 - **Terraform** - Infrastructure as Code
-- **Helm** - Package management
+- **Helm** - Package management (pulls upstream `osdfir-infrastructure` chart)
 - **Docker Desktop** - Container runtime
 
 ## 🚧 Work in Progress
@@ -124,7 +124,7 @@ This automatically handles:
 - **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (Working!)
 - **OpenRelik AI Workers** - AI-powered evidence analysis (In Progress)
 - **Centralized AI Configuration** - Single YAML file for all AI settings
-- **Timesketch MCP Server** - Provides programmatic interaction with Timesketch. (Deployed and connects to LLM, needs usage info.)
+- **Timesketch MCP Server** - Prebuilt via GitHub Actions, deployable via Terraform toggle.
 - **Yeti MCP Server** - in consideration to add
 
 **Current Status:** 
