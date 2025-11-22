@@ -35,6 +35,43 @@ $Colors = @{
     Command = "Magenta"
 }
 
+$script:IsFirstDeployment = $false
+
+function Update-DeploymentContext {
+    param(
+        [string]$Namespace,
+        [string]$ReleaseName
+    )
+
+    $tfStatePath = Join-Path $PSScriptRoot "..\terraform\terraform.tfstate"
+    $hasTerraformState = Test-Path $tfStatePath
+
+    $hasHelmRelease = $false
+    try {
+        $helmOutput = helm list -n $Namespace -o json 2>$null
+        if ($helmOutput) {
+            $helmReleases = $helmOutput | ConvertFrom-Json
+            if ($helmReleases) {
+                if ($helmReleases -isnot [System.Array]) {
+                    $helmReleases = @($helmReleases)
+                }
+                $hasHelmRelease = ($helmReleases | Where-Object { $_.name -eq $ReleaseName } | Measure-Object).Count -gt 0
+            }
+        }
+    } catch {
+        $hasHelmRelease = $false
+    }
+
+    $script:IsFirstDeployment = -not ($hasTerraformState -or $hasHelmRelease)
+}
+
+function Get-HelmTimeoutSeconds {
+    if ($script:IsFirstDeployment) {
+        return 1500
+    }
+    return 600
+}
+
 function Show-Header {
     param([string]$Title)
     Write-Host ""
@@ -876,6 +913,12 @@ function Start-FullDeployment {
     if (-not (Test-Prerequisites)) {
         return
     }
+
+    Update-DeploymentContext -Namespace $Namespace -ReleaseName $ReleaseName
+    if ($script:IsFirstDeployment) {
+        Write-Host ""
+        Write-Host "First-time deployment detected. Initial container pulls (especially the Ollama model download) can take longer than usual." -ForegroundColor $Colors.Warning
+    }
     
     if ($DryRun) {
         Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Warning
@@ -915,6 +958,7 @@ function Start-FullDeployment {
     Write-Host "Step 3: Deploying OSDFIR with Terraform..." -ForegroundColor $Colors.Info
     Push-Location "$PSScriptRoot\..\terraform"
     try {
+        $helmTimeoutSec = Get-HelmTimeoutSeconds
         terraform init
         if ($LASTEXITCODE -ne 0) {
             Write-Host "ERROR: Terraform init failed" -ForegroundColor $Colors.Error
@@ -941,7 +985,7 @@ function Start-FullDeployment {
             }
         }
         
-        terraform apply -auto-approve
+        terraform apply -auto-approve -var "helm_timeout=$helmTimeoutSec"
         if ($LASTEXITCODE -ne 0) {
             Write-Host "ERROR: Terraform apply failed" -ForegroundColor $Colors.Error
             return
@@ -953,11 +997,14 @@ function Start-FullDeployment {
     # Step 4: Wait for pods to be ready
     Write-Host ""
     Write-Host "Step 4: Waiting for pods to be ready..." -ForegroundColor $Colors.Info
-    $timeout = 600  # 10 minutes
+    $timeout = Get-HelmTimeoutSeconds
     $elapsed = 0
     do {
         Start-Sleep -Seconds 20
         $elapsed += 20
+        if ($elapsed -gt 0 -and ($elapsed % 120 -eq 0)) {
+            Write-Host "Tip: Run 'kubectl get deploy -n $Namespace' in another terminal to monitor rollout progress." -ForegroundColor $Colors.Info
+        }
         $pods = kubectl get pods -n $Namespace --no-headers 2>$null
         $runningPods = ($pods | Where-Object { $_ -match "Running" -and $_ -match "1/1" }).Count
         $runningPods += ($pods | Where-Object { $_ -match "Running" -and $_ -match "2/2" }).Count
@@ -1158,6 +1205,8 @@ function Restart-Deployment {
         Write-Host "TIP: Run .\manage-osdfir-lab.ps1 deploy to start the full environment" -ForegroundColor $Colors.Info
         return
     }
+
+    Update-DeploymentContext -Namespace $Namespace -ReleaseName $ReleaseName
     
     if ($DryRun) {
         Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Warning
@@ -1307,7 +1356,8 @@ openrelik:
         $modifiedMainContent | Out-File -FilePath "main.tf" -Encoding UTF8
         
         # Run terraform apply to reinstall
-        terraform apply -auto-approve
+        $helmTimeoutSec = Get-HelmTimeoutSeconds
+        terraform apply -auto-approve -var "helm_timeout=$helmTimeoutSec"
         $terraformResult = $LASTEXITCODE
         
         # Restore original main.tf
@@ -1326,11 +1376,14 @@ openrelik:
     # Step 7: Wait for pods to be ready
     Write-Host ""
     Write-Host "Step 7: Waiting for pods to be ready..." -ForegroundColor $Colors.Info
-    $timeout = 600  # 10 minutes for full startup including AI model download
+    $timeout = Get-HelmTimeoutSeconds
     $elapsed = 0
     do {
         Start-Sleep -Seconds 20
         $elapsed += 20
+        if ($elapsed -gt 0 -and ($elapsed % 120 -eq 0)) {
+            Write-Host "Tip: Run 'kubectl get deploy -n $Namespace' in another terminal to monitor rollout progress." -ForegroundColor $Colors.Info
+        }
         $pods = kubectl get pods -n $Namespace --no-headers 2>$null
         $runningPods = ($pods | Where-Object { $_ -match "Running" -and $_ -match "1/1" }).Count
         $runningPods += ($pods | Where-Object { $_ -match "Running" -and $_ -match "2/2" }).Count

@@ -4,7 +4,7 @@
 variable "osdfir_chart_version" {
   description = "Version of the osdfir-infrastructure Helm chart to deploy"
   type        = string
-  default     = "2.4.3"  # Only use the numerical part of the version
+  default     = "2.5.6"  # Only use the numerical part of the version
 }
 
 
@@ -29,14 +29,14 @@ variable "deploy_ollama" {
 variable "ai_model_name" {
   description = "Name of the AI model to use with Ollama"
   type        = string
-  default     = "qwen2.5:0.5b"
+  default     = "smollm:latest"
 }
 
 # Set the maximum input tokens for the AI model
 variable "ai_model_max_input_tokens" {
   description = "Maximum input tokens for the AI model"
   type        = number
-  default     = 32768
+  default     = 8192
 }
 
 # Set the URL for the Ollama server pod
@@ -44,6 +44,12 @@ variable "ai_model_server_url" {
   description = "URL for the Ollama server"
   type        = string
   default     = "http://ollama.osdfir.svc.cluster.local:11434"
+}
+
+variable "helm_timeout" {
+  description = "Seconds Helm waits for resources to become ready"
+  type        = number
+  default     = 600
 }
 
 

@@ -55,8 +55,52 @@ resource "kubernetes_deployment" "ollama" {
           image_pull_policy = "IfNotPresent"
           
           command = ["/bin/bash", "-c"]
-          # Using a simpler script with proper escape sequences
-          args = ["#!/bin/bash\nset -e\necho 'Checking if model exists...'\nif [ -f /root/.ollama/models/manifests/registry.ollama.ai/library/qwen2.5/0.5b ]; then\n  echo 'Model already exists, skipping download'\n  exit 0\nfi\necho 'Starting Ollama service...'\nollama serve &\nOLLAMA_PID=$!\necho 'Waiting for Ollama to be ready...'\nfor i in $(seq 1 30); do\n  if ollama list >/dev/null 2>&1; then\n    echo 'Ollama service is ready!'\n    break\n  fi\n  echo \"Waiting for Ollama... (attempt $i/30)\"\n  sleep 5\n  if [ $i -eq 30 ]; then\n    echo 'ERROR: Ollama service did not become ready'\n    kill $OLLAMA_PID 2>/dev/null || true\n    exit 1\n  fi\ndone\necho 'Pulling model qwen2.5:0.5b...'\nollama pull qwen2.5:0.5b\necho 'Model pull completed, stopping init service...'\nkill $OLLAMA_PID\nwait $OLLAMA_PID"]
+          args = [<<-EOT
+            set -e
+            cat <<'SCRIPT' >/tmp/model-puller.sh
+            set -e
+            MODEL="${var.ai_model_name}"
+            MODEL_DIR=$(printf '%s' "$MODEL" | tr ':' '/')
+            MODEL_PATH="/root/.ollama/models/manifests/registry.ollama.ai/library/$MODEL_DIR"
+
+            echo "Checking if $MODEL model already exists..."
+            if [ -f "$MODEL_PATH" ]; then
+              echo "Model $MODEL already exists, skipping download"
+              exit 0
+            fi
+
+            echo "Starting Ollama service..."
+            ollama serve &
+            OLLAMA_PID=$!
+
+            echo "Waiting for Ollama to be ready..."
+            for i in $(seq 1 30); do
+              if ollama list >/dev/null 2>&1; then
+                echo "Ollama service is ready!"
+                break
+              fi
+              echo "Waiting for Ollama... (attempt $i/30)"
+              sleep 5
+              if [ $i -eq 30 ]; then
+                echo "ERROR: Ollama service did not become ready"
+                kill $OLLAMA_PID 2>/dev/null || true
+                exit 1
+              fi
+            done
+
+            echo "Pulling model $MODEL..."
+            ollama pull "$MODEL"
+
+            echo "Model pull completed, stopping init service..."
+            kill $OLLAMA_PID
+            wait $OLLAMA_PID
+            SCRIPT
+
+            tr -d '\r' </tmp/model-puller.sh >/tmp/model-puller-unix.sh
+            chmod +x /tmp/model-puller-unix.sh
+            exec /bin/bash /tmp/model-puller-unix.sh
+          EOT
+          ]
           
           volume_mount {
             name       = "ollama-cache"

@@ -67,6 +67,7 @@ resource "helm_release" "osdfir" {
   chart     = "osdfir-charts/osdfir-infrastructure"
   version   = var.osdfir_chart_version
   namespace = kubernetes_namespace.osdfir.metadata[0].name
+  timeout   = var.helm_timeout
   
   # Add this line to use your values file
   values = [file("${path.module}/../configs/osdfir-lab-values.yaml")]

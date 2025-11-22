@@ -1,12 +1,12 @@
 
-![Version](https://img.shields.io/badge/version-20250822-orange) 
+![Version](https://img.shields.io/badge/version-20251120-orange) 
 ![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) 
 ![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 # OSDFIR Lab
 
-**Version:** 20250822
+**Version:** 20251120
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -115,11 +115,18 @@ This automatically handles:
 - **Helm** - Package management (pulls upstream `osdfir-infrastructure` chart)
 - **Docker Desktop** - Container runtime
 
+### Component Versions (20251120 baseline)
+
+- `osdfir-infrastructure` Helm chart: **2.5.6**
+- Timesketch image: **20251114** (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
+- OpenRelik core services: **0.6.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.4.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.5.0`)
+- Ollama model: **smollm:latest**
+
 ## 🚧 Work in Progress
 
 ### AI Integration (Experimental)
 
-- **Ollama Server** - Local AI model hosting (`qwen2.5:0.5b`). **NOTE: This is intentionally small for this project, feel free to adjust.**
+- **Ollama Server** - Local AI model hosting (`smollm:latest`). **NOTE: This is intentionally small for this project, feel free to adjust.**
 - **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (Working!)
 - **OpenRelik AI Workers** - AI-powered evidence analysis (In Progress)
 - **Timesketch MCP Server** - Prebuilt via GitHub Actions, deployable via Terraform toggle.
@@ -157,6 +164,7 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 - When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
 - Eventually, Terraform my timeout waiting on the pods to all start up, use command `kubectl get pods -n osdfir` to check status. Terraform timing out does not mean the deployment failed, simply that Terraform stopped waiting.
 - After initial deployment, if the Timesketch AI features warn that a provider is needed, you may need to wait and reload the browser to see if the settings will work.
+- On a first deployment the management script automatically extends Helm’s timeout and will periodically remind you that you can run `kubectl get deploy -n osdfir` in another terminal—expect a longer wait while images download and the Ollama model is pulled.
 - For more serious testing, connect to a stronger LLM
 
 ## Known Issues / Troubleshooting Tips

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to a `YYYYMMDD` versioning scheme.
 
+## [20251120] - 2025-11-21
+
+### Added
+- First-deployment detection and extended Terraform/Helm timeout handling in `scripts/manage-osdfir-lab.ps1`, including periodic status reminders during long rollouts.
+
+### Changed
+- Upgraded to `osdfir-infrastructure` Helm chart **2.5.6**.
+- Bumped Timesketch to image tag **20251114** with aligned dependency images (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`).
+- Bumped OpenRelik components to **0.6.0** and pinned worker images (analyzer-config `0.2.0`, plaso `0.4.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.5.0`).
+- Swapped the default Ollama model to `smollm:latest` and hardened the model pull init script for Windows-safe execution.
+- Documented the new component versions and deployment guidance in `README.md` and `docs/updating_osdfir_lab.md`; updated project version badge to **20251120**.
+
+### Fixed
+- Resolved CRLF-related failures in the Ollama init container by normalising scripts before execution.
+
 ## [20250822] - 2025-08-22
 
 ### Added
