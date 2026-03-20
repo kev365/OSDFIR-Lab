@@ -13,7 +13,7 @@ param(
     [string]$Namespace = "osdfir",
     
     [Parameter(Mandatory = $false)]
-    [ValidateSet("all", "timesketch", "openrelik")]
+    [ValidateSet("all", "timesketch", "openrelik", "yeti")]
     [string]$Service = "all",
     
     # Help alias
@@ -728,6 +728,7 @@ function Start-Services {
         @{Name="Timesketch"; Service="$ReleaseName-timesketch"; Port="5000"},
         @{Name="OpenRelik-UI"; Service="$ReleaseName-openrelik"; Port="8711"},
         @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-api"; Port="8710"},
+        @{Name="Yeti"; Service="$ReleaseName-yeti"; Port="9999"},
         @{Name="Timesketch-MCP-Server"; Service="timesketch-mcp-server"; Port="8081"}
     )
     
@@ -829,7 +830,11 @@ function Show-Credentials {
         "openrelik" {
             Get-ServiceCredential -ServiceName "OpenRelik" -SecretName "$ReleaseName-openrelik-secret" -SecretKey "openrelik-user" -Username "openrelik" -ServiceUrl "http://localhost:8711"
         }
-        
+
+        "yeti" {
+            Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "api-key" -Username "yeti" -ServiceUrl "http://localhost:9999"
+        }
+
         "all" {
             # Check which services are actually deployed
             $timesketchSecret = kubectl get secret --namespace $Namespace "$ReleaseName-timesketch-secret" 2>$null
@@ -841,8 +846,13 @@ function Show-Credentials {
             if ($openrelikSecret) {
                 Get-ServiceCredential -ServiceName "OpenRelik" -SecretName "$ReleaseName-openrelik-secret" -SecretKey "openrelik-user" -Username "openrelik" -ServiceUrl "http://localhost:8711"
             }
-            
-            if (-not ($timesketchSecret -or $openrelikSecret)) {
+
+            $yetiSecret = kubectl get secret --namespace $Namespace "$ReleaseName-yeti-secret" 2>$null
+            if ($yetiSecret) {
+                Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "api-key" -Username "yeti" -ServiceUrl "http://localhost:9999"
+            }
+
+            if (-not ($timesketchSecret -or $openrelikSecret -or $yetiSecret)) {
                 Write-Host "ERROR: No credential secrets found for release '$ReleaseName' in namespace '$Namespace'" -ForegroundColor $Colors.Error
             }
         }

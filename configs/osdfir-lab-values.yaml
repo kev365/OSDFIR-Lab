@@ -34,9 +34,9 @@ global:
   openrelik:
     enabled: true 
   yeti:
-    enabled: false  # Not currently set up in the lab
+    enabled: true
   hashr:
-    enabled: false  # Not currently set up in the lab
+    enabled: true
   grr:
     enabled: false  # Not currently used in the lab
 
@@ -63,7 +63,7 @@ timesketch:
   image:
     repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
     pullPolicy: IfNotPresent
-    tag: "20251114"
+    tag: "20260311"
   config:
     override: true
     existingConfigMap: osdfir-lab-ts-configs
@@ -107,12 +107,12 @@ openrelik:
     image:
       repository: ghcr.io/openrelik/openrelik-ui
       pullPolicy: IfNotPresent
-      tag: "0.6.0"
+      tag: "0.7.0"
   api:
     image:
       repository: ghcr.io/openrelik/openrelik-server
       pullPolicy: IfNotPresent
-      tag: "0.6.0"
+      tag: "0.7.0"
     resources:
       limits: {}
       requests: {}
@@ -123,12 +123,12 @@ openrelik:
     image:
       repository: ghcr.io/openrelik/openrelik-mediator
       pullPolicy: IfNotPresent
-      tag: "0.6.0"
+      tag: "0.7.0"
   metrics:
     image:
       repository: ghcr.io/openrelik/openrelik-metrics
       pullPolicy: IfNotPresent
-      tag: "0.6.0"
+      tag: "0.7.0"
   redis:
     image:
       repository: redis
@@ -140,7 +140,7 @@ openrelik:
   prometheus:
     image:
       repository: prom/prometheus
-      tag: "v3.0.1"
+      tag: "v3.10.0"
 
   # LLM analyzer configuration (using OpenRelik chart's built-in configmap)
   config:
@@ -163,7 +163,7 @@ openrelik:
       resources: {}
 
     - name: openrelik-worker-plaso
-      image: ghcr.io/openrelik/openrelik-worker-plaso:0.4.0
+      image: ghcr.io/openrelik/openrelik-worker-plaso:0.5.0
       command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
       env: {}
       resources: {}
@@ -205,7 +205,7 @@ openrelik:
           cpu: 2
 
     - name: openrelik-worker-extraction
-      image: ghcr.io/openrelik/openrelik-worker-extraction:0.5.0
+      image: ghcr.io/openrelik/openrelik-worker-extraction:0.6.0
       command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
       env: {}
       resources: {}
@@ -283,7 +283,7 @@ openrelik:
 #      env: {}
 #      resources: {}
 
-# Hshr Configuration
+# HashR Configuration
 hashr:
   image:
     repository: us-docker.pkg.dev/osdfir-registry/hashr/release/hashr
@@ -292,7 +292,7 @@ hashr:
   postgresql:
     image:
       repository: postgres
-      tag: "17.5"
+      tag: "17.2-alpine"
 
 # Yeti Configuration
 yeti:
@@ -303,12 +303,12 @@ yeti:
     image:
       repository: yetiplatform/yeti-frontend
       pullPolicy: IfNotPresent
-      tag: 2.4.2
+      tag: 2.5.0
   api:
     image:
       repository: yetiplatform/yeti
       pullPolicy: IfNotPresent
-      tag: 2.4.2
+      tag: 2.5.0
     resources:
       limits: {}
       requests: {}
@@ -316,13 +316,13 @@ yeti:
     image:
       repository: yetiplatform/yeti
       pullPolicy: IfNotPresent
-      tag: 2.4.2
+      tag: 2.5.0
   redis:
     image:
       repository: redis
-      tag: "7.4.4-alpine"
+      tag: "7.4.2-alpine"
   arangodb:
     image:
       repository: arangodb
       pullPolicy: IfNotPresent
-      tag: "3.12.5"
+      tag: "3.11.8"

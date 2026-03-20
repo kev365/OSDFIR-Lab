@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to a `YYYYMMDD` versioning scheme.
 
+## [20260319] - 2026-03-19
+
+### Changed
+- Bumped Timesketch to image tag **20260311** (from 20251114) — adds Plaso event filters, starred-events-to-forensic-report LLM feature.
+- Bumped OpenRelik core components (UI, server, mediator, metrics) to **0.7.0** (from 0.6.0) — adds ADK integration, workflow engine, SSE streaming.
+- Bumped `openrelik-worker-plaso` to **0.5.0** (from 0.4.0) and `openrelik-worker-extraction` to **0.6.0** (from 0.5.0).
+- Bumped Prometheus to **v3.10.0** (from v3.0.1).
+- Added "Changing the LLM model" quick-reference to `docs/updating_osdfir_lab.md`.
+- Updated version baseline documentation in `README.md` and `docs/updating_osdfir_lab.md`; updated project version badge to **20260319**.
+
+## [20260318] - 2026-03-18
+
+### Added
+- Enabled **HashR** (`v1.8.2`) for hash verification and analysis.
+- Enabled **Yeti** (`2.5.0`) threat intelligence platform with ArangoDB `3.11.8` and Redis `7.4.2-alpine`.
+- Yeti port forwarding (`http://localhost:9999`) and credential retrieval in `manage-osdfir-lab.ps1`.
+- Configured Timesketch integration with HashR (database address) and Yeti (API endpoint).
+
+### Changed
+- Upgraded to `osdfir-infrastructure` Helm chart **2.8.4** (from 2.5.6).
+- Updated Yeti images to `2.5.0`, ArangoDB to `3.11.8`, Redis to `7.4.2-alpine`.
+- Updated HashR PostgreSQL to `17.2-alpine`.
+- Updated version baseline documentation in `README.md` and `docs/updating_osdfir_lab.md`; updated project version badge to **20260318**.
+- Fixed `Hshr` typo in `osdfir-lab-values.yaml` comment.
+
 ## [20251120] - 2025-11-21
 
 ### Added

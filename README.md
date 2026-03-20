@@ -1,12 +1,12 @@
 
-![Version](https://img.shields.io/badge/version-20251120-orange) 
+![Version](https://img.shields.io/badge/version-20260319-orange)
 ![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) 
 ![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 # OSDFIR Lab
 
-**Version:** 20251120
+**Version:** 20260319
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -91,6 +91,7 @@ This automatically handles:
 # - Timesketch: http://localhost:5000
 # - OpenRelik: http://localhost:8711
 # - OpenRelik API: http://localhost:8710
+# - Yeti: http://localhost:9999
 ```
 
 ### Cleanup
@@ -115,11 +116,14 @@ This automatically handles:
 - **Helm** - Package management (pulls upstream `osdfir-infrastructure` chart)
 - **Docker Desktop** - Container runtime
 
-### Component Versions (20251120 baseline)
+### Component Versions (20260319 baseline)
 
-- `osdfir-infrastructure` Helm chart: **2.5.6**
-- Timesketch image: **20251114** (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
-- OpenRelik core services: **0.6.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.4.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.5.0`)
+- `osdfir-infrastructure` Helm chart: **2.8.4**
+- Timesketch image: **20260311** (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
+- OpenRelik core services: **0.7.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.5.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.6.0`)
+- Prometheus (OpenRelik): **v3.10.0**
+- Yeti: **2.5.0** (Redis `7.4.2-alpine`, ArangoDB `3.11.8`)
+- HashR: **v1.8.2** (Postgres `17.2-alpine`)
 - Ollama model: **smollm:latest**
 
 ## 🚧 Work in Progress
@@ -179,7 +183,7 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 - **Documentation**: Update docs and create comprehensive how-to guides
 - **Deployment**: Improve deployment process and error handling
 - **Pod Management**: Enhance methods to add/remove/modify pods
-- **Integration**: Complete Yeti and HashR integration setup
+- **Integration**: Verify Yeti and HashR post-deploy credential sharing with Timesketch
 - **External LLMs**: Determine settings for using LLMs outside of the pods
 - **OpenSearch Management**: Establish process for backing up/upgrading/scaling OpenSearch
 
