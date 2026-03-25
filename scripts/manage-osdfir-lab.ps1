@@ -603,7 +603,10 @@ function Show-OllamaStatus {
         $testModel = $availableModels[0]
         try {
             Write-Host "  Testing model '$testModel' with forensic prompt..." -ForegroundColor $Colors.Info
-            $testPrompt = "List 3 common digital forensics file types. Answer with just the file types."
+            $testPrompt = "Name 3 common digital forensics file types in a single comma-separated line."
+            Write-Host ""
+            Write-Host "  Prompt:" -ForegroundColor $Colors.Info
+            Write-Host "    $testPrompt" -ForegroundColor $Colors.Gray
             $promptResult = kubectl exec -n $Namespace $name -- sh -c "echo '$testPrompt' | ollama run $testModel 2>/dev/null" 2>$null
             # Strip ANSI escape codes in PowerShell
             $cleaned = $promptResult -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
@@ -611,8 +614,10 @@ function Show-OllamaStatus {
 
             if ($responseText -and $responseText.Trim().Length -gt 0) {
                 Write-Host "  [OK] AI model is responding to prompts" -ForegroundColor $Colors.Success
-                $preview = $responseText.Trim().Substring(0, [Math]::Min(120, $responseText.Trim().Length))
-                Write-Host "  Sample response: $preview" -ForegroundColor $Colors.Gray
+                Write-Host "  Response:" -ForegroundColor $Colors.Info
+                foreach ($line in $responseText -split "`n") {
+                    Write-Host "    $line" -ForegroundColor $Colors.Gray
+                }
             } else {
                 Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
             }
@@ -1814,8 +1819,8 @@ switch ($Action.ToLower()) {
         
         # Test prompts with numbering and humorous forensics questions
         $testPrompts = @(
-            @{Number=1; Prompt="Tell me a pun about digital forensics. Be creative and funny."},
-            @{Number=2; Prompt="Write a haiku about finding deleted files. Make it dramatic and slightly ridiculous."}
+            @{Number=1; Prompt="Tell me a one-liner pun about digital forensics."},
+            @{Number=2; Prompt="Write a single haiku about finding deleted files."}
         )
         
         $totalPrompts = $testPrompts.Count
@@ -1832,7 +1837,10 @@ switch ($Action.ToLower()) {
                 $responseText = ($cleaned -join "`n").Trim()
 
                 if ($responseText -and $responseText.Length -gt 0) {
-                    Write-Host "  [OK] $responseText" -ForegroundColor $Colors.Success
+                    Write-Host "  [OK] Response:" -ForegroundColor $Colors.Success
+                    foreach ($line in $responseText -split "`n") {
+                        Write-Host "    $line" -ForegroundColor $Colors.Gray
+                    }
                 } else {
                     Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
                 }

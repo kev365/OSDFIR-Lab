@@ -1,7 +1,8 @@
 # Read AI configuration from values file
 locals {
   values_yaml = yamldecode(file("${path.module}/../configs/osdfir-lab-values.yaml"))
-  ai_config = local.values_yaml.ai
+  ai_config          = local.values_yaml.ai
+  openrelik_enabled  = try(local.values_yaml.global.openrelik.enabled, false)
 }
 
 # Ollama deployment
@@ -246,7 +247,7 @@ resource "kubernetes_config_map" "ollama_models_config" {
 # but openrelik-ai-common reads these env vars to discover available LLM providers.
 # Without these, the OpenRelik UI shows "no LLMs configured".
 resource "null_resource" "openrelik_api_llm_env" {
-  count = var.deploy_ollama ? 1 : 0
+  count = var.deploy_ollama && local.openrelik_enabled ? 1 : 0
 
   triggers = {
     model_name = var.ai_model_name
@@ -268,6 +269,8 @@ resource "null_resource" "openrelik_api_llm_env" {
 # causing TIMESKETCH_PASSWORD to be empty. This patches the worker with the
 # correct password from the Timesketch secret.
 resource "null_resource" "openrelik_timesketch_worker_fix" {
+  count = local.openrelik_enabled ? 1 : 0
+
   triggers = {
     helm_release = var.osdfir_chart_version
   }

@@ -5,7 +5,7 @@
 # and uses these values for model configuration
 ai:
   model:
-    name: "gemma3:270m"
+    name: "qwen2.5:0.5b"
     provider: "ollama"
     server_url: "http://ollama.osdfir.svc.cluster.local:11434"
     timeouts:
@@ -32,9 +32,9 @@ global:
   timesketch:
     enabled: true
   openrelik:
-    enabled: true 
+    enabled: false
   yeti:
-    enabled: true
+    enabled: false
   hashr:
     enabled: false
   grr:

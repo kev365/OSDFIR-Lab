@@ -63,7 +63,7 @@ variable "enable_ollama_vulkan" {
 variable "ai_model_name" {
   description = "Name of the AI model to use with Ollama"
   type        = string
-  default     = "gemma3:270m"
+  default     = "qwen2.5:0.5b"
 }
 
 # Set the maximum input tokens for the AI model

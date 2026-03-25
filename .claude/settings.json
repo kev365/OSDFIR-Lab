@@ -39,7 +39,8 @@
       "Bash(kubectl rollout:*)",
       "Bash(bash tools/build-ts-configs.sh)",
       "Bash(powershell.exe -NoProfile -Command ':*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(terraform plan:*)"
     ],
     "additionalDirectories": [
       "\\dev"
