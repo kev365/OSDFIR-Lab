@@ -20,7 +20,7 @@ and this project adheres to a `YYYYMMDD` versioning scheme.
 ### Added
 - Enabled **HashR** (`v1.8.2`) for hash verification and analysis.
 - Enabled **Yeti** (`2.5.0`) threat intelligence platform with ArangoDB `3.11.8` and Redis `7.4.2-alpine`.
-- Yeti port forwarding (`http://localhost:9999`) and credential retrieval in `manage-osdfir-lab.ps1`.
+- Yeti port forwarding (`http://localhost:9000`) and credential retrieval in `manage-osdfir-lab.ps1`.
 - Configured Timesketch integration with HashR (database address) and Yeti (API endpoint).
 
 ### Changed

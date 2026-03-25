@@ -5,6 +5,7 @@
     helm       = { source = "hashicorp/helm",       version = ">= 2.0.0" }
     local      = { source = "hashicorp/local",      version = ">= 2.0.0" }
     null       = { source = "hashicorp/null",       version = ">= 3.0.0" }
+    random     = { source = "hashicorp/random",     version = ">= 3.0.0" }
   }
 }
 
@@ -68,6 +69,7 @@ resource "helm_release" "osdfir" {
   version   = var.osdfir_chart_version
   namespace = kubernetes_namespace.osdfir.metadata[0].name
   timeout   = var.helm_timeout
+  wait      = false  # Don't block on pod readiness; use manage-osdfir-lab.ps1 status to verify
   
   # Add this line to use your values file
   values = [file("${path.module}/../configs/osdfir-lab-values.yaml")]
@@ -75,6 +77,8 @@ resource "helm_release" "osdfir" {
   depends_on = [
     null_resource.helm_repo,
     kubernetes_namespace.osdfir,
-    kubernetes_config_map.timesketch_configs
+    kubernetes_config_map.timesketch_configs,
+    kubernetes_secret.yeti_seed,
+    kubernetes_secret.hashr_postgres_seed
   ]
 }

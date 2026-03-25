@@ -91,7 +91,7 @@ This automatically handles:
 # - Timesketch: http://localhost:5000
 # - OpenRelik: http://localhost:8711
 # - OpenRelik API: http://localhost:8710
-# - Yeti: http://localhost:9999
+# - Yeti: http://localhost:9000
 ```
 
 ### Cleanup

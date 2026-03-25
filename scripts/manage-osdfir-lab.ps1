@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("help", "status", "start", "stop", "restart", "logs", "cleanup", "creds", "jobs", "helm", "uninstall", "reinstall", "storage", "minikube", "deploy", "teardown-lab", "teardown-lab-all", "ollama", "ollama-test", "docker")]
+    [ValidateSet("help", "status", "start", "stop", "restart", "logs", "cleanup", "creds", "jobs", "helm", "uninstall", "reinstall", "storage", "minikube", "deploy", "shutdown-lab", "shutdown-lab-all", "ollama", "ollama-test", "docker", "mcp-setup")]
     [string]$Action = "help",
     
     [Parameter(Mandatory = $false)]
@@ -34,6 +34,9 @@ $Colors = @{
     Gray = "Gray"
     Command = "Magenta"
 }
+
+# Build the command path relative to the user's current directory
+$ScriptCmd = (Resolve-Path -Relative $MyInvocation.MyCommand.Path) -replace '/', '\'
 
 $script:IsFirstDeployment = $false
 
@@ -82,12 +85,12 @@ function Show-Header {
 function Show-Help {
     Show-Header "OSDFIR Lab Management Tool"
     Write-Host ""
-    Write-Host "Usage: .\manage-osdfir-lab.ps1 [action] [options]" -ForegroundColor $Colors.Warning
+    Write-Host "Usage: $ScriptCmd [action] [options]" -ForegroundColor $Colors.Warning
     Write-Host ""
     Write-Host "DEPLOYMENT + TEARDOWN:" -ForegroundColor $Colors.Success
     Write-Host "  deploy           - Full deployment (Docker + Minikube + Terraform + Services)"
-    Write-Host "  teardown-lab     - Smart cleanup (Services + Terraform, PRESERVES AI models/data)" -ForegroundColor $Colors.Header
-    Write-Host "  teardown-lab-all - Complete destruction (Everything including AI models/data)" -ForegroundColor $Colors.Error
+    Write-Host "  shutdown-lab     - Smart cleanup (Services + Terraform, PRESERVES AI models/data)" -ForegroundColor $Colors.Header
+    Write-Host "  shutdown-lab-all - Complete destruction (Everything including AI models/data)" -ForegroundColor $Colors.Error
     Write-Host "  docker           - Check and start Docker Desktop if needed"
     Write-Host ""
     Write-Host "STATUS + MONITORING:" -ForegroundColor $Colors.Success
@@ -107,6 +110,7 @@ function Show-Help {
     Write-Host "AI + SPECIALIZED:" -ForegroundColor $Colors.Success
     Write-Host "  ollama       - Show Ollama AI model status and connectivity"
     Write-Host "  ollama-test  - Run comprehensive AI prompt testing"
+    Write-Host "  mcp-setup    - Configure MCP server API keys and secrets"
     Write-Host ""
     Write-Host "MAINTENANCE:" -ForegroundColor $Colors.Success
     Write-Host "  cleanup      - Clean up OSDFIR deployment"
@@ -121,14 +125,14 @@ function Show-Help {
     Write-Host "  -DryRun           Show what would be done without executing"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor $Colors.Header
-    Write-Host "  .\manage-osdfir-lab.ps1 -h"
-    Write-Host "  .\manage-osdfir-lab.ps1 docker"
-    Write-Host "  .\manage-osdfir-lab.ps1 deploy            # Preserves passwords if they exist"
-    Write-Host "  .\manage-osdfir-lab.ps1 reinstall         # Reinstall while preserving passwords"
-    Write-Host "  .\manage-osdfir-lab.ps1 teardown-lab      # Smart cleanup - preserves AI models/data" -ForegroundColor $Colors.Header
-    Write-Host "  .\manage-osdfir-lab.ps1 teardown-lab-all  # Nuclear option - destroys everything" -ForegroundColor $Colors.Error
-    Write-Host "  .\manage-osdfir-lab.ps1 status"
-    Write-Host "  .\manage-osdfir-lab.ps1 creds -Service timesketch"
+    Write-Host "  $ScriptCmd -h"
+    Write-Host "  $ScriptCmd docker"
+    Write-Host "  $ScriptCmd deploy            # Preserves passwords if they exist"
+    Write-Host "  $ScriptCmd reinstall         # Reinstall while preserving passwords"
+    Write-Host "  $ScriptCmd shutdown-lab      # Smart cleanup - preserves AI models/data" -ForegroundColor $Colors.Header
+    Write-Host "  $ScriptCmd shutdown-lab-all  # Nuclear option - destroys everything" -ForegroundColor $Colors.Error
+    Write-Host "  $ScriptCmd status"
+    Write-Host "  $ScriptCmd creds -Service timesketch"
 }
 
 function Test-Prerequisites {
@@ -195,9 +199,9 @@ function Get-OptimalResources {
         $memoryGB = [math]::Max([math]::Floor($totalMemoryGB * 0.5), 4)
     }
     
-    # Get CPU count and use half, minimum 2, maximum 8 for balanced performance
+    # Get CPU count and allocate 50%, minimum 2
     $totalCPUs = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-    $cpus = [math]::Min([math]::Max([math]::Floor($totalCPUs / 2), 2), 8)
+    $cpus = [math]::Max([math]::Floor($totalCPUs * 0.5), 2)
     
     Write-Host "System Resources:" -ForegroundColor $Colors.Success
     Write-Host "  Total Memory: ${totalMemoryGB}GB"
@@ -299,9 +303,9 @@ function Start-OSDFIRMinikube {
         $dockerMemory = "Unknown"
     }
     
-    # Calculate Minikube resource allocation (adjust as needed)
+    # Calculate Minikube resource allocation (50% of system CPUs, 60% of memory)
     $minikubeMemory = [math]::Min(12, [math]::Floor($totalMemory * 0.6))
-    $minikubeCPUs = [math]::Min(8, [math]::Floor($totalCPUs * 0.6))
+    $minikubeCPUs = [math]::Max([math]::Floor($totalCPUs * 0.5), 2)
     
     Write-Host "System Resources:" -ForegroundColor $Colors.Info
     Write-Host "  Total Memory: ${totalMemory}GB" -ForegroundColor $Colors.Info
@@ -398,8 +402,8 @@ function Remove-MinikubeCluster {
     param([switch]$SkipConfirmation = $false)
     
     Write-Host ""
-    Write-Host "Deleting OSDFIR Minikube Cluster..." -ForegroundColor $Colors.Error
-    Write-Host "==================================" -ForegroundColor $Colors.Error
+    Write-Host "Deleting OSDFIR Lab Minikube Cluster..." -ForegroundColor $Colors.Error
+    Write-Host "=======================================" -ForegroundColor $Colors.Error
     Write-Host ""
     
     # Stop tunnel first
@@ -508,7 +512,7 @@ function Show-MinikubeStatus {
     
     if (-not (Test-MinikubeRunning)) {
         Write-Host "Minikube cluster 'osdfir' is not running" -ForegroundColor $Colors.Error
-        Write-Host "TIP: Run .\manage-osdfir-lab.ps1 deploy to start the full environment" -ForegroundColor $Colors.Info
+        Write-Host "TIP: Run $ScriptCmd deploy to start the full environment" -ForegroundColor $Colors.Info
         return
     }
     
@@ -600,11 +604,15 @@ function Show-OllamaStatus {
         try {
             Write-Host "  Testing model '$testModel' with forensic prompt..." -ForegroundColor $Colors.Info
             $testPrompt = "List 3 common digital forensics file types. Answer with just the file types."
-            $promptResult = kubectl exec -n $Namespace $name -- ollama run $testModel "$testPrompt" 2>$null
-            
-            if ($promptResult -and $promptResult.Length -gt 10) {
+            $promptResult = kubectl exec -n $Namespace $name -- sh -c "echo '$testPrompt' | ollama run $testModel 2>/dev/null" 2>$null
+            # Strip ANSI escape codes in PowerShell
+            $cleaned = $promptResult -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
+            $responseText = ($cleaned -join "`n").Trim()
+
+            if ($responseText -and $responseText.Trim().Length -gt 0) {
                 Write-Host "  [OK] AI model is responding to prompts" -ForegroundColor $Colors.Success
-                Write-Host "  Sample response: $($promptResult.Substring(0, [Math]::Min(80, $promptResult.Length)))..." -ForegroundColor $Colors.Gray
+                $preview = $responseText.Trim().Substring(0, [Math]::Min(120, $responseText.Trim().Length))
+                Write-Host "  Sample response: $preview" -ForegroundColor $Colors.Gray
             } else {
                 Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
             }
@@ -615,12 +623,12 @@ function Show-OllamaStatus {
 }
 
 function Show-Status {
-    Show-Header "OSDFIR Deployment Status"
+    Show-Header "OSDFIR Lab Deployment Status"
     
     # Check Minikube first
     if (-not (Test-MinikubeRunning)) {
         Write-Host "Minikube cluster 'osdfir' is not running" -ForegroundColor $Colors.Error
-        Write-Host "TIP: Run .\manage-osdfir-lab.ps1 deploy to start the full environment" -ForegroundColor $Colors.Info
+        Write-Host "TIP: Run $ScriptCmd deploy to start the full environment" -ForegroundColor $Colors.Info
         return
     }
     
@@ -683,7 +691,7 @@ function Show-Status {
     
     if ($osdfirJobs.Count -eq 0) {
         Write-Host "  No port forwarding jobs running" -ForegroundColor $Colors.Warning
-        Write-Host "  TIP: Run .\manage-osdfir-lab.ps1 start" -ForegroundColor $Colors.Info
+        Write-Host "  TIP: Run $ScriptCmd start" -ForegroundColor $Colors.Info
     } else {
         foreach ($job in $osdfirJobs) {
             $serviceName = $job.Name -replace "pf-", ""
@@ -709,12 +717,12 @@ function Show-Status {
 }
 
 function Start-Services {
-    Show-Header "Starting OSDFIR Services"
+    Show-Header "Starting OSDFIR Lab Services"
     
     # Check prerequisites
     if (-not (Test-MinikubeRunning)) {
         Write-Host "ERROR: Minikube cluster is not running" -ForegroundColor $Colors.Error
-        Write-Host "TIP: Run .\manage-osdfir-lab.ps1 deploy to start the full environment" -ForegroundColor $Colors.Info
+        Write-Host "TIP: Run $ScriptCmd deploy to start the full environment" -ForegroundColor $Colors.Info
         return
     }
     
@@ -722,29 +730,28 @@ function Start-Services {
         return
     }
     
-    Write-Host "Checking service availability..." -ForegroundColor $Colors.Info
-    
+    Write-Host "Discovering deployed services..." -ForegroundColor $Colors.Info
+
     $services = @(
         @{Name="Timesketch"; Service="$ReleaseName-timesketch"; Port="5000"},
-        @{Name="OpenRelik-UI"; Service="$ReleaseName-openrelik"; Port="8711"},
-        @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-api"; Port="8710"},
-        @{Name="Yeti"; Service="$ReleaseName-yeti"; Port="9999"},
-        @{Name="Timesketch-MCP-Server"; Service="timesketch-mcp-server"; Port="8081"}
+        @{Name="OpenRelik-UI"; Service="$ReleaseName-openrelik-nginx"; Port="8711"},
+        @{Name="OpenRelik-API"; Service="$ReleaseName-openrelik-nginx"; Port="8710"},
+        @{Name="Yeti"; Service="$ReleaseName-yeti"; Port="9000"},
+        @{Name="Timesketch-MCP"; Service="timesketch-mcp-server"; Port="8081"},
+        @{Name="OpenRelik-MCP"; Service="openrelik-mcp-server"; Port="7070"},
+        @{Name="Yeti-MCP"; Service="yeti-mcp-server"; Port="8082"}
     )
-    
+
     $availableServices = @()
     foreach ($svc in $services) {
         $null = kubectl get service $svc.Service -n $Namespace --no-headers 2>$null
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [OK] $($svc.Name) service is available" -ForegroundColor $Colors.Success
             $availableServices += $svc
-        } else {
-            Write-Host "  [ERROR] $($svc.Name) service not found" -ForegroundColor $Colors.Error
         }
     }
     
     if ($availableServices.Count -eq 0) {
-        Write-Host "ERROR: No OSDFIR services are available. Please check your deployment." -ForegroundColor $Colors.Error
+        Write-Host "ERROR: No OSDFIR Lab services are available. Please check your deployment." -ForegroundColor $Colors.Error
         return
     }
     
@@ -775,16 +782,13 @@ function Start-Services {
     Write-Host ""
     Write-Host "Waiting for port forwarding to initialize..." -ForegroundColor $Colors.Info
     Start-Sleep -Seconds 5
-    
+    Write-Host "Port forwarding is now active!" -ForegroundColor $Colors.Success
+
     Write-Host ""
     Write-Host "OSDFIR Services Available:" -ForegroundColor $Colors.Success
     foreach ($svc in $availableServices) {
         Write-Host "  $($svc.Name): http://localhost:$($svc.Port)" -ForegroundColor $Colors.Header
     }
-    
-    Write-Host ""
-    Write-Host "Port forwarding is now active!" -ForegroundColor $Colors.Success
-    Write-Host "TIP: Use .\manage-osdfir-lab.ps1 creds to get login credentials" -ForegroundColor $Colors.Info
 }
 
 function Get-ServiceCredential {
@@ -811,7 +815,7 @@ function Get-ServiceCredential {
 }
 
 function Show-Credentials {
-    Show-Header "OSDFIR Service Credentials"
+    Show-Header "OSDFIR Lab Service Credentials"
     
     # Check kubectl access
     if (-not (Test-KubectlAccess)) {
@@ -832,7 +836,7 @@ function Show-Credentials {
         }
 
         "yeti" {
-            Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "api-key" -Username "yeti" -ServiceUrl "http://localhost:9999"
+            Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "yeti-user" -Username "yeti" -ServiceUrl "http://localhost:9000"
         }
 
         "all" {
@@ -849,7 +853,7 @@ function Show-Credentials {
 
             $yetiSecret = kubectl get secret --namespace $Namespace "$ReleaseName-yeti-secret" 2>$null
             if ($yetiSecret) {
-                Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "api-key" -Username "yeti" -ServiceUrl "http://localhost:9999"
+                Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "yeti-user" -Username "yeti" -ServiceUrl "http://localhost:9000"
             }
 
             if (-not ($timesketchSecret -or $openrelikSecret -or $yetiSecret)) {
@@ -861,8 +865,126 @@ function Show-Credentials {
     Write-Host "NOTE: Change default credentials in production environments!" -ForegroundColor $Colors.Warning
 }
 
+function Setup-McpServers {
+    Show-Header "MCP Server Setup"
+
+    if (-not (Test-KubectlAccess)) {
+        return
+    }
+
+    # Define MCP servers and their secret requirements
+    # Timesketch MCP uses the existing Timesketch secret — no extra setup needed
+    $mcpServers = @(
+        @{
+            Name        = "Timesketch MCP"
+            Service     = "timesketch-mcp-server"
+            SecretName  = ""  # Uses existing timesketch secret
+            SecretKey   = ""
+            SetupNote   = ""
+        },
+        @{
+            Name        = "OpenRelik MCP"
+            Service     = "openrelik-mcp-server"
+            SecretName  = "openrelik-mcp-secret"
+            SecretKey   = "api-key"
+            SetupNote   = "Create an API key in OpenRelik UI: Log in > Settings > API Keys > Create"
+        },
+        @{
+            Name        = "Yeti MCP"
+            Service     = "yeti-mcp-server"
+            SecretName  = "yeti-mcp-secret"
+            SecretKey   = "api-key"
+            SetupNote   = "Create an API key in Yeti UI: Log in > Admin > API Keys > Create"
+        }
+    )
+
+    $foundAny = $false
+
+    foreach ($mcp in $mcpServers) {
+        # Check if this MCP server is deployed
+        $svc = kubectl get service $mcp.Service -n $Namespace --no-headers 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            continue
+        }
+
+        $foundAny = $true
+        Write-Host "$($mcp.Name):" -ForegroundColor $Colors.Header
+
+        # Check pod status
+        $pod = kubectl get pods -n $Namespace -l "app=$($mcp.Service)" --no-headers 2>$null
+        if ($pod) {
+            $parts = $pod -split '\s+'
+            $podStatus = $parts[2]
+            if ($podStatus -eq "Running") {
+                Write-Host "  [OK] Pod is running" -ForegroundColor $Colors.Success
+            } else {
+                Write-Host "  [WARN] Pod status: $podStatus" -ForegroundColor $Colors.Warning
+            }
+        } else {
+            Write-Host "  [ERROR] No pod found" -ForegroundColor $Colors.Error
+        }
+
+        # If no secret needed (Timesketch), just report status
+        if (-not $mcp.SecretName) {
+            Write-Host "  [OK] Uses existing Timesketch credentials (no extra setup needed)" -ForegroundColor $Colors.Success
+            Write-Host ""
+            continue
+        }
+
+        # Check if the secret already exists
+        $existingSecret = kubectl get secret $mcp.SecretName -n $Namespace --no-headers 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] Secret '$($mcp.SecretName)' exists" -ForegroundColor $Colors.Success
+            Write-Host ""
+            continue
+        }
+
+        # Secret doesn't exist — guide the user
+        Write-Host "  [MISSING] Secret '$($mcp.SecretName)' not found" -ForegroundColor $Colors.Warning
+        Write-Host "  $($mcp.SetupNote)" -ForegroundColor $Colors.Info
+        Write-Host ""
+
+        $apiKey = Read-Host "  Enter $($mcp.Name) API key (or press Enter to skip)" -MaskInput
+        if ($apiKey -and $apiKey.Trim().Length -gt 0) {
+            kubectl create secret generic $mcp.SecretName --from-literal="$($mcp.SecretKey)=$($apiKey.Trim())" -n $Namespace 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  [OK] Secret '$($mcp.SecretName)' created" -ForegroundColor $Colors.Success
+                # Restart the MCP pod so it picks up the new secret
+                kubectl rollout restart deployment/$mcp.Service -n $Namespace 2>$null
+                Write-Host "  [OK] Restarting $($mcp.Name) pod..." -ForegroundColor $Colors.Success
+            } else {
+                Write-Host "  [ERROR] Failed to create secret" -ForegroundColor $Colors.Error
+            }
+        } else {
+            Write-Host "  [SKIPPED] You can run $ScriptCmd mcp-setup again later" -ForegroundColor $Colors.Warning
+        }
+        Write-Host ""
+    }
+
+    if (-not $foundAny) {
+        Write-Host "No MCP servers are currently deployed." -ForegroundColor $Colors.Warning
+        Write-Host "Enable them in terraform/variables.tf and run terraform apply." -ForegroundColor $Colors.Info
+        return
+    }
+
+    Write-Host "MCP Server Endpoints:" -ForegroundColor $Colors.Header
+    $endpoints = @(
+        @{Name="Timesketch MCP"; Service="timesketch-mcp-server"; Port="8081"},
+        @{Name="OpenRelik MCP"; Service="openrelik-mcp-server"; Port="7070"},
+        @{Name="Yeti MCP"; Service="yeti-mcp-server"; Port="8082"}
+    )
+    foreach ($ep in $endpoints) {
+        $svc = kubectl get service $ep.Service -n $Namespace --no-headers 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  $($ep.Name): http://$($ep.Service).$Namespace.svc.cluster.local:$($ep.Port)" -ForegroundColor $Colors.Success
+        }
+    }
+    Write-Host ""
+    Write-Host "TIP: Use these internal URLs when configuring MCP clients (e.g., Claude Desktop, VS Code)." -ForegroundColor $Colors.Info
+}
+
 function Show-Logs {
-    Show-Header "OSDFIR Service Logs"
+    Show-Header "OSDFIR Lab Service Logs"
     if (-not (Test-KubectlAccess)) {
         return
     }
@@ -918,7 +1040,7 @@ function Show-Storage {
 }
 
 function Start-FullDeployment {
-    Show-Header "Full OSDFIR Deployment"
+    Show-Header "Full OSDFIR Lab Deployment"
     
     if (-not (Test-Prerequisites)) {
         return
@@ -965,7 +1087,7 @@ function Start-FullDeployment {
     
     # Step 3: Deploy with Terraform
     Write-Host ""
-    Write-Host "Step 3: Deploying OSDFIR with Terraform..." -ForegroundColor $Colors.Info
+    Write-Host "Step 3: Deploying OSDFIR Lab with Terraform..." -ForegroundColor $Colors.Info
     Push-Location "$PSScriptRoot\..\terraform"
     try {
         $helmTimeoutSec = Get-HelmTimeoutSeconds
@@ -1058,23 +1180,63 @@ function Start-FullDeployment {
     } while ($runningPods -lt $totalPods -and $elapsed -lt $timeout)
     
     if ($runningPods -lt $totalPods) {
-        Write-Host "WARNING: Not all pods are ready after $timeout seconds" -ForegroundColor $Colors.Warning
-        Write-Host "You can check status with: .\manage-osdfir-lab.ps1 status" -ForegroundColor $Colors.Info
+        Write-Host ""
+        Write-Host "WARNING: $runningPods/$totalPods pods ready after $timeout seconds. Some pods are still starting." -ForegroundColor $Colors.Warning
+        Write-Host 'This is normal - image pulls and model downloads can take several minutes.' -ForegroundColor $Colors.Info
+        Write-Host ""
+        # Show which pods are not ready
+        $notReady = $pods | Where-Object { $_ -notmatch "Running\s+.*/.*\s" -or $_ -match "0/" }
+        if ($notReady) {
+            Write-Host "Pods not yet ready:" -ForegroundColor $Colors.Warning
+            $notReady | ForEach-Object {
+                $parts = ($_ -split '\s+')
+                $name = $parts[0]
+                $ready = $parts[1]
+                $status = $parts[2]
+                Write-Host "  - $name ($status, $ready)" -ForegroundColor $Colors.Warning
+            }
+        }
+        Write-Host ""
+        Write-Host "Monitor pods until all are running:" -ForegroundColor $Colors.Info
+        Write-Host "  kubectl get pods -n $Namespace -w" -ForegroundColor $Colors.Gray
+        Write-Host "Check status anytime:" -ForegroundColor $Colors.Info
+        Write-Host "  $ScriptCmd status" -ForegroundColor $Colors.Gray
+        Write-Host "View logs for a failing pod:" -ForegroundColor $Colors.Info
+        Write-Host ('  kubectl logs -n ' + $Namespace + ' <pod-name> --tail=30') -ForegroundColor $Colors.Gray
+    } else {
+        Write-Host "All $totalPods pods are ready!" -ForegroundColor $Colors.Success
     }
-    
+
     # Step 5: Start services
     Write-Host ""
     Write-Host "Step 5: Starting port forwarding..." -ForegroundColor $Colors.Info
     Start-Services
-    
+
     Write-Host ""
     Write-Host "Deployment completed!" -ForegroundColor $Colors.Success
-    Write-Host "Use .\manage-osdfir-lab.ps1 creds to get login credentials" -ForegroundColor $Colors.Info
-    Write-Host "Use .\manage-osdfir-lab.ps1 ollama to check AI model status" -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "$ScriptCmd creds" -ForegroundColor $Colors.Header
+    Write-Host " to get login credentials" -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "$ScriptCmd ollama" -ForegroundColor $Colors.Header
+    Write-Host " to check AI model status" -ForegroundColor $Colors.Info
+
+    # Check if any MCP servers are deployed and remind about setup
+    $mcpServices = @("timesketch-mcp-server", "openrelik-mcp-server", "yeti-mcp-server")
+    $hasMcp = $false
+    foreach ($mcp in $mcpServices) {
+        $svc = kubectl get service $mcp -n $Namespace --no-headers 2>$null
+        if ($LASTEXITCODE -eq 0) { $hasMcp = $true; break }
+    }
+    if ($hasMcp) {
+        Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
+        Write-Host -NoNewline "$ScriptCmd mcp-setup" -ForegroundColor $Colors.Header
+        Write-Host " to configure MCP server API keys" -ForegroundColor $Colors.Info
+    }
 }
 
 function Start-SmartCleanup {
-    Show-Header "Smart OSDFIR Cleanup (Preserves AI Models & Data)"
+    Show-Header 'Smart OSDFIR Lab Cleanup (Preserves AI Models & Data)'
     
     if ($DryRun) {
         Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Warning
@@ -1085,7 +1247,7 @@ function Start-SmartCleanup {
     }
     
     if (-not $Force) {
-        Write-Host "This will clean up OSDFIR services but preserve:" -ForegroundColor $Colors.Info
+        Write-Host "This will clean up OSDFIR Lab services but preserve:" -ForegroundColor $Colors.Info
         Write-Host "  - AI models (no re-download needed)" -ForegroundColor $Colors.Success
         Write-Host "  - Database data" -ForegroundColor $Colors.Success
         Write-Host "  - Minikube cluster" -ForegroundColor $Colors.Success
@@ -1121,20 +1283,20 @@ function Start-SmartCleanup {
     
     Write-Host ""
     Write-Host "Smart cleanup completed!" -ForegroundColor $Colors.Success
-    Write-Host "[OK] Services removed" -ForegroundColor $Colors.Success
-    Write-Host "[OK] AI models preserved (next deploy will be faster)" -ForegroundColor $Colors.Header
-    Write-Host "[OK] Database data preserved" -ForegroundColor $Colors.Header
-    Write-Host "[OK] Minikube cluster ready for redeployment" -ForegroundColor $Colors.Header
+    Write-Host '[OK] Services removed' -ForegroundColor $Colors.Success
+    Write-Host '[OK] AI models preserved (next deploy will be faster)' -ForegroundColor $Colors.Header
+    Write-Host '[OK] Database data preserved' -ForegroundColor $Colors.Header
+    Write-Host '[OK] Minikube cluster ready for redeployment' -ForegroundColor $Colors.Header
 }
 
 function Start-FullCleanup {
-    Show-Header "COMPLETE OSDFIR Destruction (Nuclear Option)"
+    Show-Header "COMPLETE OSDFIR Lab Destruction (Nuclear Option)"
     
     if ($DryRun) {
         Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Error
         Write-Host "1. Stop all port forwarding jobs" -ForegroundColor $Colors.Info
-        Write-Host "2. Destroy Terraform resources" -ForegroundColor $Colors.Info
-        Write-Host "3. Delete entire Minikube cluster (including AI models & data)" -ForegroundColor $Colors.Error
+        Write-Host "2. Force-delete all Kubernetes resources and remove Terraform state" -ForegroundColor $Colors.Info
+        Write-Host '3. Delete entire Minikube cluster (including AI models & data)' -ForegroundColor $Colors.Error
         return
     }
     
@@ -1142,20 +1304,20 @@ function Start-FullCleanup {
     Write-Host "WARNING: COMPLETE DESTRUCTION MODE" -ForegroundColor $Colors.Error -BackgroundColor Black
     Write-Host ""
     Write-Host "This will permanently destroy:" -ForegroundColor $Colors.Error
-    Write-Host "  - All OSDFIR services" -ForegroundColor $Colors.Warning
+    Write-Host "  - All OSDFIR Lab services" -ForegroundColor $Colors.Warning
     Write-Host "  - All database data" -ForegroundColor $Colors.Warning  
-    Write-Host "  - All AI models (1.6GB+ will need re-download)" -ForegroundColor $Colors.Warning
+    Write-Host '  - All AI models (1.6GB+ will need re-download)' -ForegroundColor $Colors.Warning
     Write-Host "  - Entire Minikube cluster" -ForegroundColor $Colors.Warning
     Write-Host "  - All persistent volumes and data" -ForegroundColor $Colors.Warning
     Write-Host ""
-    Write-Host "TIP: Consider 'teardown-lab' instead to preserve AI models and data" -ForegroundColor $Colors.Info
+    Write-Host "TIP: Consider 'shutdown-lab' instead to preserve AI models and data" -ForegroundColor $Colors.Info
     Write-Host ""
     
     if (-not $Force) {
         $confirmation = Read-Host "Type 'DESTROY' in all caps to confirm complete destruction"
         if ($confirmation -ne "DESTROY") {
             Write-Host "Complete destruction cancelled." -ForegroundColor $Colors.Success
-            Write-Host "TIP: Use 'teardown-lab' for smart cleanup that preserves data" -ForegroundColor $Colors.Info
+            Write-Host "TIP: Use 'shutdown-lab' for smart cleanup that preserves data" -ForegroundColor $Colors.Info
             return
         }
         
@@ -1176,19 +1338,32 @@ function Start-FullCleanup {
         Write-Host "Port forwarding jobs stopped." -ForegroundColor $Colors.Success
     }
     
-    # Step 2: Destroy Terraform
+    # Step 2: Force-delete namespace resources, then clean Terraform state
     Write-Host ""
-    Write-Host "Step 2: Destroying Terraform resources..." -ForegroundColor $Colors.Info
-    Push-Location "$PSScriptRoot\..\terraform"
-    try {
-        terraform destroy -auto-approve
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARNING: Terraform destroy had issues" -ForegroundColor $Colors.Warning
-        }
-    } finally {
-        Pop-Location
+    Write-Host "Step 2: Cleaning up Kubernetes resources..." -ForegroundColor $Colors.Info
+
+    # Force-delete all resources in the namespace so nothing blocks teardown
+    $nsExists = kubectl get namespace $Namespace --no-headers 2>$null
+    if ($nsExists) {
+        Write-Host "  Force-deleting all resources in namespace '$Namespace'..." -ForegroundColor $Colors.Info
+        kubectl delete all --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
+        kubectl delete pvc --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
+        kubectl delete secrets --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
+        kubectl delete configmaps --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
+        kubectl delete namespace $Namespace --force --grace-period=0 2>$null | Out-Null
+        Write-Host "  Namespace resources force-deleted." -ForegroundColor $Colors.Success
     }
-    
+
+    # Remove Terraform state files so the next deploy is a fresh install.
+    # This is critical: if the state survives, Terraform will attempt a Helm
+    # "upgrade" instead of an "install", and the chart will skip user-creation
+    # postStart hooks, leaving all services without credentials.
+    Write-Host "  Removing Terraform state files..." -ForegroundColor $Colors.Info
+    $tfDir = Join-Path $PSScriptRoot "..\terraform"
+    Remove-Item -Path (Join-Path $tfDir "terraform.tfstate") -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path (Join-Path $tfDir "terraform.tfstate.backup") -Force -ErrorAction SilentlyContinue
+    Write-Host "  Terraform state cleared." -ForegroundColor $Colors.Success
+
     # Step 3: Delete Minikube cluster completely
     Write-Host ""
     Write-Host "Step 3: Deleting entire Minikube cluster..." -ForegroundColor $Colors.Error
@@ -1204,7 +1379,7 @@ function Start-FullCleanup {
 }
 
 function Restart-Deployment {
-    Show-Header "Reinstalling OSDFIR Deployment"
+    Show-Header "Reinstalling OSDFIR Lab Deployment"
     
     if (-not (Test-Prerequisites)) {
         return
@@ -1212,7 +1387,7 @@ function Restart-Deployment {
     
     if (-not (Test-MinikubeRunning)) {
         Write-Host "ERROR: Minikube cluster is not running" -ForegroundColor $Colors.Error
-        Write-Host "TIP: Run .\manage-osdfir-lab.ps1 deploy to start the full environment" -ForegroundColor $Colors.Info
+        Write-Host "TIP: Run $ScriptCmd deploy to start the full environment" -ForegroundColor $Colors.Info
         return
     }
 
@@ -1357,7 +1532,7 @@ openrelik:
     
     # Step 6: Reinstall with Terraform using preserved passwords
     Write-Host ""
-    Write-Host "Step 6: Reinstalling OSDFIR with Terraform and preserved passwords..." -ForegroundColor $Colors.Info
+    Write-Host "Step 6: Reinstalling OSDFIR Lab with Terraform and preserved passwords..." -ForegroundColor $Colors.Info
     Push-Location "$PSScriptRoot\..\terraform"
     try {
         # Modify the Terraform main.tf to include the temp values file
@@ -1438,7 +1613,7 @@ openrelik:
     
     if ($runningPods -lt $totalPods) {
         Write-Host "WARNING: Not all pods are ready after $timeout seconds" -ForegroundColor $Colors.Warning
-        Write-Host "You can check status with: .\manage-osdfir-lab.ps1 status" -ForegroundColor $Colors.Info
+        Write-Host "You can check status with: $ScriptCmd status" -ForegroundColor $Colors.Info
     } else {
         Write-Host "All pods are ready!" -ForegroundColor $Colors.Success
     }
@@ -1455,8 +1630,12 @@ openrelik:
     } else {
         Write-Host "New database passwords were generated - existing data may be inaccessible." -ForegroundColor $Colors.Warning
     }
-    Write-Host "Use .\manage-osdfir-lab.ps1 creds to get login credentials" -ForegroundColor $Colors.Info
-    Write-Host "Use .\manage-osdfir-lab.ps1 ollama to check AI model status" -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "$ScriptCmd creds" -ForegroundColor $Colors.Header
+    Write-Host " to get login credentials" -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
+    Write-Host -NoNewline "$ScriptCmd ollama" -ForegroundColor $Colors.Header
+    Write-Host " to check AI model status" -ForegroundColor $Colors.Info
 }
 
 #function New-MCPServerImage {
@@ -1526,7 +1705,7 @@ switch ($Action.ToLower()) {
         Show-Header "Background Jobs"
         $allJobs = Get-Job | Where-Object { $_.Name -like "pf-*" -or $_.Name -eq "minikube-tunnel" }
         if ($allJobs.Count -eq 0) {
-            Write-Host "No OSDFIR-related jobs found." -ForegroundColor $Colors.Warning
+            Write-Host "No OSDFIR Lab related jobs found." -ForegroundColor $Colors.Warning
         } else {
             foreach ($job in $allJobs) {
                 $status = switch ($job.State) {
@@ -1547,22 +1726,22 @@ switch ($Action.ToLower()) {
         }
     }
     "cleanup" { 
-        Write-Host "OSDFIR Cleanup - Use with caution!" -ForegroundColor $Colors.Error
+        Write-Host "OSDFIR Lab Cleanup - Use with caution!" -ForegroundColor $Colors.Error
         if (-not $Force) {
-            $confirmation = Read-Host "Are you sure you want to cleanup OSDFIR resources? (yes/no)"
+            $confirmation = Read-Host "Are you sure you want to cleanup OSDFIR Lab resources? (yes/no)"
             if ($confirmation -ne "yes") {
                 Write-Host "Cleanup cancelled." -ForegroundColor $Colors.Warning
                 return
             }
         }
-        Write-Host "Cleaning up OSDFIR jobs..." -ForegroundColor $Colors.Warning
+        Write-Host "Cleaning up OSDFIR Lab jobs..." -ForegroundColor $Colors.Warning
         $allJobs = Get-Job | Where-Object { $_.Name -like "pf-*" -or $_.Name -eq "minikube-tunnel" }
         if ($allJobs) {
             $allJobs | Stop-Job
             $allJobs | Remove-Job -Force
-            Write-Host "OSDFIR jobs cleaned up." -ForegroundColor $Colors.Success
+            Write-Host "OSDFIR Lab jobs cleaned up." -ForegroundColor $Colors.Success
         } else {
-            Write-Host "No OSDFIR jobs found to clean up." -ForegroundColor $Colors.Info
+            Write-Host "No OSDFIR Lab jobs found to clean up." -ForegroundColor $Colors.Info
         }
     }
     "helm" { Show-Helm }
@@ -1574,7 +1753,7 @@ switch ($Action.ToLower()) {
                 return
             }
         }
-        Show-Header "Uninstalling OSDFIR Helm Release"
+        Show-Header "Uninstalling OSDFIR Lab Helm Release"
         helm uninstall $ReleaseName -n $Namespace
     }
     "reinstall" { Restart-Deployment }
@@ -1593,8 +1772,9 @@ switch ($Action.ToLower()) {
         }
     }
     "deploy" { Start-FullDeployment }
-    "teardown-lab" { Start-SmartCleanup }
-    "teardown-lab-all" { Start-FullCleanup }
+    "shutdown-lab" { Start-SmartCleanup }
+    "shutdown-lab-all" { Start-FullCleanup }
+    "mcp-setup" { Setup-McpServers }
     "ollama" { Show-OllamaStatus }
     "ollama-test" {
         Show-Header "Ollama AI Prompt Testing"
@@ -1645,23 +1825,16 @@ switch ($Action.ToLower()) {
             Write-Host "Response:" -ForegroundColor $Colors.Success
             
             try {
-                $promptResult = kubectl exec -n $Namespace $name -- ollama run $testModel "$($promptObj.Prompt)" 2>&1 | Out-String
+                $escapedPrompt = $promptObj.Prompt -replace "'", "'\''"
+                $promptResult = kubectl exec -n $Namespace $name -- sh -c "echo '$escapedPrompt' | ollama run $testModel 2>/dev/null" 2>$null
+                # Strip ANSI escape codes in PowerShell
+                $cleaned = $promptResult -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
+                $responseText = ($cleaned -join "`n").Trim()
 
-                if ($promptResult -and $promptResult.Trim().Length -gt 10) {
-                    # Extract the actual answer (last meaningful line)
-                    $lines = $promptResult -split "`n" | Where-Object { $_.Trim() -ne "" }
-                    $actualAnswer = $lines | Where-Object { $_ -notmatch "Thinking|\.\.\.done thinking" } | Select-Object -Last 1
-                    
-                    if ($actualAnswer -and $actualAnswer.Trim().Length -gt 5) {
-                        Write-Host "  [OK] AI model is responding to prompts" -ForegroundColor $Colors.Success
-                        Write-Host "  Sample response: $($actualAnswer.Trim())" -ForegroundColor $Colors.Gray
-                    } else {
-                        Write-Host "  [OK] AI model responding but verbose output detected" -ForegroundColor $Colors.Warning
-                        Write-Host "  Raw response length: $($promptResult.Length) characters" -ForegroundColor $Colors.Gray
-                    }
+                if ($responseText -and $responseText.Length -gt 0) {
+                    Write-Host "  [OK] $responseText" -ForegroundColor $Colors.Success
                 } else {
                     Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
-                    Write-Host "  Debug: Response length = $($promptResult.Length)" -ForegroundColor $Colors.Gray
                 }
             } catch {
                 Write-Host "Error: $($_.Exception.Message)" -ForegroundColor $Colors.Error

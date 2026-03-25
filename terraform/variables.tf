@@ -8,10 +8,33 @@ variable "osdfir_chart_version" {
 }
 
 
-# Timesketch MCP Server
-# Control whether to deploy the Timesketch MCP Server
-variable "deploy_mcp_server" {
+# MCP Server Deployments
+# MCP (Model Context Protocol) servers provide AI tool interfaces to forensic platforms.
+# Each MCP server connects to its respective service and exposes tools via SSE/HTTP.
+
+# Timesketch MCP Server — queries Timesketch sketches, events, and timelines
+# Source: https://github.com/timesketch/timesketch-mcp-server
+variable "deploy_timesketch_mcp" {
   description = "Whether to deploy the Timesketch MCP Server"
+  type        = bool
+  default     = false  # false = disabled, true = enabled
+}
+
+# OpenRelik MCP Server — interacts with OpenRelik workflows and data
+# Source: https://github.com/openrelik/openrelik-mcp-server
+# Requires: API key created in OpenRelik UI (Settings > API Keys)
+variable "deploy_openrelik_mcp" {
+  description = "Whether to deploy the OpenRelik MCP Server"
+  type        = bool
+  default     = false  # false = disabled, true = enabled
+}
+
+# Yeti MCP Server — queries Yeti threat intelligence platform
+# Source: https://github.com/yeti-platform/yeti-mcp
+# Requires: API key created in Yeti UI
+# Note: No official Docker image published yet — must be built and pushed to GHCR
+variable "deploy_yeti_mcp" {
+  description = "Whether to deploy the Yeti MCP Server"
   type        = bool
   default     = false  # false = disabled, true = enabled
 }
@@ -22,21 +45,32 @@ variable "deploy_mcp_server" {
 variable "deploy_ollama" {
   description = "Whether to deploy the Ollama server"
   type        = bool
-  default     = true  # false = disabled, true = enabled
+  default     = true
+}
+
+# Enable Vulkan GPU acceleration for Ollama (experimental)
+# Vulkan is a cross-platform GPU API that can accelerate LLM inference.
+# Only useful if the host has a GPU passed through to the Kubernetes node.
+# In CPU-only environments (e.g., Minikube on laptop), leave this disabled.
+# See: https://github.com/ollama/ollama/blob/main/docs/gpu.md
+variable "enable_ollama_vulkan" {
+  description = "Enable experimental Vulkan GPU acceleration for Ollama"
+  type        = bool
+  default     = false  # Set to true if GPU is available
 }
 
 # Set the AI Model to use with Ollama
 variable "ai_model_name" {
   description = "Name of the AI model to use with Ollama"
   type        = string
-  default     = "smollm:latest"
+  default     = "gemma3:270m"
 }
 
 # Set the maximum input tokens for the AI model
 variable "ai_model_max_input_tokens" {
   description = "Maximum input tokens for the AI model"
   type        = number
-  default     = 8192
+  default     = 32768
 }
 
 # Set the URL for the Ollama server pod

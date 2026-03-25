@@ -5,16 +5,16 @@
 # and uses these values for model configuration
 ai:
   model:
-    name: "smollm:latest"
+    name: "gemma3:270m"
     provider: "ollama"
     server_url: "http://ollama.osdfir.svc.cluster.local:11434"
     timeouts:
       llm_request: 120        # Main LLM request timeout (seconds)
-      api_timeout: 120       # Timesketch API timeout (seconds) 
+      api_timeout: 120       # Timesketch API timeout (seconds)
       http_connect: 20       # HTTP connection timeout
       http_read: 120          # HTTP read timeout (should match llm_request)
       warm_up: 120            # Model warm-up timeout
-    max_input_tokens: 8192
+    max_input_tokens: 32768
     # max_output_tokens: 1024
     # temperature: 0.1
     # Forensic-specific system prompt
@@ -36,12 +36,15 @@ global:
   yeti:
     enabled: true
   hashr:
-    enabled: true
+    enabled: false
   grr:
     enabled: false  # Not currently used in the lab
 
-  # Timesketch MCP Server deployment, enabled/disable here: terraform\variables.tf
-  # Ollama deployment, enabled/disable here: terraform\variables.tf
+  # The following are managed via terraform/variables.tf:
+  #   Ollama deployment (deploy_ollama)
+  #   Timesketch MCP Server (deploy_timesketch_mcp)
+  #   OpenRelik MCP Server (deploy_openrelik_mcp)
+  #   Yeti MCP Server (deploy_yeti_mcp)
 
 # Global Security Settings
 securityContext:
@@ -116,9 +119,6 @@ openrelik:
     resources:
       limits: {}
       requests: {}
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8710"]
-    env:
-      REDIS_URL: "redis://openrelik-redis:6379"
   mediator:
     image:
       repository: ghcr.io/openrelik/openrelik-mediator
@@ -147,7 +147,7 @@ openrelik:
     analyzers:
       llm:
         provider: "ollama"
-        model: "smollm:latest"
+        model: "gemma3:270m"
         #max_input_tokens: !!int 4096
         # max_output_tokens: !!int 2048
         # temperature: !!float 0.1
@@ -177,8 +177,14 @@ openrelik:
       resources: {}
 
     - name: openrelik-worker-hayabusa
-      image: ghcr.io/openrelik/openrelik-worker-hayabusa:0.3.0
+      image: ghcr.io/openrelik-contrib/openrelik-worker-hayabusa:latest
       command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-hayabusa"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-eztools
+      image: ghcr.io/openrelik-contrib/openrelik-worker-eztools:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-eztools"
       env: {}
       resources: {}
 
@@ -195,7 +201,7 @@ openrelik:
         - name: LLM_PROVIDER
           value: "ollama"
         - name: LLM_MODEL_NAME
-          value: "smollm:latest"
+          value: "gemma3:270m"
       resources:
         requests:
           memory: 2Gi

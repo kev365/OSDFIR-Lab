@@ -13,10 +13,10 @@ These are the versions currently pinned in the lab configuration. Review the ups
 - **OSDFIR infrastructure chart**: `2.8.4` ([release notes](https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-2.8.4)).
 - **Timesketch**: `20260311` image with supporting services `nginx:1.25.5-alpine-slim`, `opensearchproject/opensearch:3.1.0`, `opensearchproject/opensearch-dashboards:3.1.0`, `redis:7.4.2-alpine`, and `postgres:17.5-alpine` ([release notes](https://github.com/google/timesketch/releases/tag/20260311)).
 - **OpenRelik**: core components `0.7.0` ([server release](https://github.com/openrelik/openrelik-server/releases/tag/0.7.0)) with workers pinned to `openrelik-worker-analyzer-config:0.2.0`, `openrelik-worker-plaso:0.5.0`, `openrelik-worker-timesketch:0.3.0`, `openrelik-worker-hayabusa:0.3.0`, and `openrelik-worker-extraction:0.6.0`.
-- **Yeti**: frontend/api `2.5.0`, `redis:7.4.2-alpine`, `arangodb:3.11.8`. Yeti UI accessible at `http://localhost:9999`.
+- **Yeti**: frontend/api `2.5.0`, `redis:7.4.2-alpine`, `arangodb:3.11.8`. Yeti UI accessible at `http://localhost:9000`.
 - **HashR**: `v1.8.2`, `postgres:17.2-alpine`.
 - **Prometheus (OpenRelik)**: `prom/prometheus:v3.10.0`.
-- **LLM model**: `smollm:latest` served through Ollama. Confirm model availability with `ollama pull smollm:latest` if you rebuild the cache.
+- **LLM model**: `gemma3:270m` served through Ollama (32K context window). Confirm model availability with `.\scripts\manage-osdfir-lab.ps1 ollama` after deployment.
 
 If upstream releases introduce new dependency versions, update `configs/osdfir-lab-values.yaml`, `terraform/variables.tf`, and the Ollama deployment templates together to keep the stack consistent.
 
@@ -27,8 +27,8 @@ After bumping versions, validate the deployment before promoting the changes:
 - Run `helm template` or `helm lint` against the updated values to catch obvious YAML issues.
 - Execute `terraform plan` to confirm the chart upgrade (`osdfir_chart_version`) and value overrides apply cleanly.
 - Once deployed, run `.\scripts\manage-osdfir-lab.ps1 status` followed by `ollama-test` to confirm the new LLM model responds.
-- Verify Timesketch AI features by requesting an NL2Q query and an event summary; both should report `smollm:latest` as the active provider.
-- Confirm Yeti is accessible at `http://localhost:9999` and credentials are returned by `.\scripts\manage-osdfir-lab.ps1 creds`.
+- Verify Timesketch AI features by requesting an NL2Q query and an event summary; both should report `gemma3:270m` as the active provider.
+- Confirm Yeti is accessible at `http://localhost:9000` and credentials are returned by `.\scripts\manage-osdfir-lab.ps1 creds`.
 - Confirm HashR pod is running via `.\scripts\manage-osdfir-lab.ps1 status`.
 - Verify Timesketch analyzers list includes the Yeti threat-intel and HashR lookup analyzers.
 
@@ -46,6 +46,39 @@ The model name is set in four places. Update all of them, then restart the affec
    kubectl rollout restart deployment/osdfir-lab-timesketch-worker -n osdfir
    kubectl rollout restart deployment/osdfir-lab-openrelik-worker-llm -n osdfir
    ```
+
+## Enabling Vulkan GPU acceleration
+
+Ollama supports experimental GPU acceleration via the [Vulkan](https://github.com/ollama/ollama/blob/main/docs/gpu.md) graphics API. This is only useful if the Kubernetes node has a GPU passed through (e.g., via GPU operator or device plugin). In CPU-only environments like a standard Minikube laptop setup, leave this disabled.
+
+To enable, set `enable_ollama_vulkan = true` in `terraform/variables.tf`, then run `terraform apply` and restart the Ollama pod:
+
+```powershell
+kubectl rollout restart deployment/ollama -n osdfir
+```
+
+## MCP Servers
+
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers provide AI tool interfaces to the forensic platforms. Each server is deployed as a separate Kubernetes pod and controlled by a toggle in `terraform/variables.tf`.
+
+| Server | Variable | Port | Image Source |
+|--------|----------|------|--------------|
+| Timesketch MCP | `deploy_timesketch_mcp` | 8081 | Built from project GHCR |
+| OpenRelik MCP | `deploy_openrelik_mcp` | 7070 | `ghcr.io/openrelik/openrelik-mcp-server:latest` |
+| Yeti MCP | `deploy_yeti_mcp` | 8082 | Must be built and pushed (no official image yet) |
+
+### Enabling an MCP server
+
+1. Set the corresponding variable to `true` in `terraform/variables.tf`.
+2. Create the required Kubernetes secret with the API key (see comments in each `.tf` file for exact commands).
+3. Run `terraform apply`.
+4. Verify with `.\scripts\manage-osdfir-lab.ps1 status` — the MCP service should appear in the services list.
+
+### MCP server sources
+
+- **Timesketch**: <https://github.com/timesketch/timesketch-mcp-server>
+- **OpenRelik**: <https://github.com/openrelik/openrelik-mcp-server>
+- **Yeti**: <https://github.com/yeti-platform/yeti-mcp>
 
 ## Usage
 
