@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git checkout:*)",
+      "Bash(bash ./tools/build-ts-configs.sh)",
+      "WebFetch(domain:hub.docker.com)",
+      "WebFetch(domain:www.arangodb.com)",
+      "WebSearch",
+      "Bash(gh api:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
