@@ -1,57 +1,87 @@
 # Updating OSDFIR Lab
 
-This document outlines how to use the `update-osdfir-lab.ps1` script to update your local OSDFIR Lab Helm charts to the latest version.
+This document covers how components in the lab are versioned and updated. Most
+of the work is now automated; the "how do I bump everything?" answer is
+usually "pull `main` and redeploy."
 
-## Overview
+## How updates flow
 
-The update script automates the process of fetching the latest release of the `osdfir-infrastructure` charts from GitHub, backing up your current project, and applying the updates. It also reapplies any custom configurations you have stored.
+### Automatic
 
-## Current version baseline (March 2026)
+| What | How it updates | Notes |
+| ---- | -------------- | ----- |
+| `osdfir-infrastructure` Helm chart | Weekly GitHub Action (`.github/workflows/check-chart-version.yml`) | Opens an auto-merging PR that bumps `terraform/variables.tf`, `README.md`, and prepends a line under `## [Unreleased]` in `CHANGELOG.md`. Requires "Allow auto-merge" enabled in repo Settings. |
+| OpenSearch + OpenSearch Dashboards | Rolling `3` image tag | Picks up the latest 3.x build on pod restart. Will NOT move to 4.x. |
+| Ollama container | `:latest` image tag with `imagePullPolicy: IfNotPresent` | To force-pull a newer image: `kubectl rollout restart deployment/ollama -n osdfir` (the pull-on-restart behavior comes from the `Always` policy on the Deployment's init-container; see [terraform/ollama.tf](../terraform/ollama.tf)). |
 
-These are the versions currently pinned in the lab configuration. Review the upstream release notes before changing them.
+### Manual (pinned)
 
-- **OSDFIR infrastructure chart**: `2.8.4` ([release notes](https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-2.8.4)).
-- **Timesketch**: `20260311` image with supporting services `nginx:1.25.5-alpine-slim`, `opensearchproject/opensearch:3.1.0`, `opensearchproject/opensearch-dashboards:3.1.0`, `redis:7.4.2-alpine`, and `postgres:17.5-alpine` ([release notes](https://github.com/google/timesketch/releases/tag/20260311)).
-- **OpenRelik**: core components `0.7.0` ([server release](https://github.com/openrelik/openrelik-server/releases/tag/0.7.0)) with workers pinned to `openrelik-worker-analyzer-config:0.2.0`, `openrelik-worker-plaso:0.5.0`, `openrelik-worker-timesketch:0.3.0`, `openrelik-worker-hayabusa:0.3.0`, and `openrelik-worker-extraction:0.6.0`.
-- **Yeti**: frontend/api `2.5.0`, `redis:7.4.2-alpine`, `arangodb:3.11.8`. Yeti UI accessible at `http://localhost:9000`.
-- **HashR**: `v1.8.2`, `postgres:17.2-alpine`.
-- **Prometheus (OpenRelik)**: `prom/prometheus:v3.10.0`.
-- **LLM model**: `gemma3:270m` served through Ollama (32K context window). Confirm model availability with `.\scripts\manage-osdfir-lab.ps1 ollama` after deployment.
+These live in [configs/osdfir-lab-values.yaml](../configs/osdfir-lab-values.yaml) and require a conscious edit:
 
-If upstream releases introduce new dependency versions, update `configs/osdfir-lab-values.yaml`, `terraform/variables.tf`, and the Ollama deployment templates together to keep the stack consistent.
+- **Timesketch image** — `timesketch.image.tag` (e.g. `"20260311"`). Check [timesketch releases](https://github.com/google/timesketch/releases) for a newer dated image.
+- **OpenRelik core services** — `openrelik.{frontend,api,mediator,metrics}.image.tag` (e.g. `"0.7.0"`). One value shared across the four services per release.
+- **OpenRelik worker pinned versions** — several worker entries under `openrelik.workers` pin specific versions (`openrelik-worker-analyzer-config:0.2.0`, `openrelik-worker-plaso:0.5.0`, `openrelik-worker-timesketch:0.3.0`, `openrelik-worker-extraction:0.6.0`). The rest use `:latest` and auto-pick up on rollout.
+- **Yeti / HashR / Prometheus** — rarely touched; image tags live in the same values file.
 
-## Post-update verification checklist
+After editing any pinned version, redeploy:
 
-After bumping versions, validate the deployment before promoting the changes:
+```powershell
+./scripts/manage-osdfir-lab.ps1 deploy
+```
 
-- Run `helm template` or `helm lint` against the updated values to catch obvious YAML issues.
-- Execute `terraform plan` to confirm the chart upgrade (`osdfir_chart_version`) and value overrides apply cleanly.
-- Once deployed, run `.\scripts\manage-osdfir-lab.ps1 status` followed by `ollama-test` to confirm the new LLM model responds.
-- Verify Timesketch AI features by requesting an NL2Q query and an event summary; both should report `gemma3:270m` as the active provider.
-- Confirm Yeti is accessible at `http://localhost:9000` and credentials are returned by `.\scripts\manage-osdfir-lab.ps1 creds`.
-- Confirm HashR pod is running via `.\scripts\manage-osdfir-lab.ps1 status`.
-- Verify Timesketch analyzers list includes the Yeti threat-intel and HashR lookup analyzers.
+Terraform picks up the changed values file, runs `helm upgrade`, and Helm
+rolls Deployments forward one at a time.
+
+## Workers (the openrelik.workers list)
+
+The worker catalog lives inline at `openrelik.workers` in
+[configs/osdfir-lab-values.yaml](../configs/osdfir-lab-values.yaml). Each entry
+carries its own `enabled`, `description`, `source` fields next to
+`image`/`command`. To enable or disable a worker:
+
+```powershell
+# Flip a catalog entry and scale an existing Deployment in one call:
+./scripts/manage-openrelik-workers.ps1 enable plaso
+./scripts/manage-openrelik-workers.ps1 disable hayabusa
+
+# See the full set (47 workers, 21 official + 26 community):
+./scripts/manage-openrelik-workers.ps1 list
+
+# Bulk-enable at deploy time instead of pre-edit:
+./scripts/manage-osdfir-lab.ps1 deploy -Enable "plaso,yara,mftecmd" -Disable "strings"
+```
+
+[scripts/manage-osdfir-lab.ps1](../scripts/manage-osdfir-lab.ps1)'s
+`Build-WorkerOverride` filters the full list to only the entries with
+`enabled: true` and a non-empty `image`, and hands that subset to Helm. So
+disabled workers never create a Deployment.
 
 ## Changing the LLM model
 
-The model name is set in four places. Update all of them, then restart the affected pods.
+Four places to update, then a restart sequence. All file paths are relative to
+the repo root.
 
-1. **`configs/osdfir-lab-values.yaml`** — `ai.model.name`, `openrelik.config.analyzers.llm.model`, and the `LLM_MODEL_NAME` env var on the `openrelik-worker-llm` worker entry.
-2. **`terraform/variables.tf`** — `ai_model_name` default value.
-3. **`configs/timesketch/timesketch.conf`** — `LLM_PROVIDER_CONFIGS` dict (three entries: `nl2q`, `llm_summarize`, `default`). After editing, rebuild the tarball with `./tools/build-ts-configs.sh`.
-4. **Restart sequence** — Run `terraform apply`, then:
+1. **[configs/osdfir-lab-values.yaml](../configs/osdfir-lab-values.yaml)** — `ai.model.name`, `openrelik.config.analyzers.llm.model`, and the `LLM_MODEL_NAME` env var on the `openrelik-worker-llm` worker entry.
+2. **[terraform/variables.tf](../terraform/variables.tf)** — `ai_model_name` default value.
+3. **configs/timesketch/timesketch.conf** — `LLM_PROVIDER_CONFIGS` dict (three entries: `nl2q`, `llm_summarize`, `default`). After editing, rebuild the tarball that terraform's config map reads from.
+4. **Restart sequence** after `./scripts/manage-osdfir-lab.ps1 deploy`:
+
    ```powershell
    kubectl rollout restart deployment/ollama -n osdfir
-   kubectl rollout restart deployment/osdfir-lab-timesketch-web -n osdfir
+   kubectl rollout restart deployment/osdfir-lab-timesketch -n osdfir
    kubectl rollout restart deployment/osdfir-lab-timesketch-worker -n osdfir
    kubectl rollout restart deployment/osdfir-lab-openrelik-worker-llm -n osdfir
    ```
 
 ## Enabling Vulkan GPU acceleration
 
-Ollama supports experimental GPU acceleration via the [Vulkan](https://github.com/ollama/ollama/blob/main/docs/gpu.md) graphics API. This is only useful if the Kubernetes node has a GPU passed through (e.g., via GPU operator or device plugin). In CPU-only environments like a standard Minikube laptop setup, leave this disabled.
+Ollama supports experimental GPU acceleration via the [Vulkan](https://github.com/ollama/ollama/blob/main/docs/gpu.md)
+graphics API. Only useful if the Kubernetes node has a GPU passed through. In
+a standard Minikube-on-laptop setup, leave it disabled.
 
-To enable, set `enable_ollama_vulkan = true` in `terraform/variables.tf`, then run `terraform apply` and restart the Ollama pod:
+To enable: set `enable_ollama_vulkan = true` in
+[terraform/variables.tf](../terraform/variables.tf), run
+`./scripts/manage-osdfir-lab.ps1 deploy`, then:
 
 ```powershell
 kubectl rollout restart deployment/ollama -n osdfir
@@ -59,20 +89,22 @@ kubectl rollout restart deployment/ollama -n osdfir
 
 ## MCP Servers
 
-[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers provide AI tool interfaces to the forensic platforms. Each server is deployed as a separate Kubernetes pod and controlled by a toggle in `terraform/variables.tf`.
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers expose
+AI tool interfaces to the forensic platforms. Each server is deployed as its
+own Kubernetes pod and toggled via a boolean in
+[terraform/variables.tf](../terraform/variables.tf).
 
-| Server | Variable | Port | Image Source |
-|--------|----------|------|--------------|
-| Timesketch MCP | `deploy_timesketch_mcp` | 8081 | Built from project GHCR |
-| OpenRelik MCP | `deploy_openrelik_mcp` | 7070 | `ghcr.io/openrelik/openrelik-mcp-server:latest` |
-| Yeti MCP | `deploy_yeti_mcp` | 8082 | Must be built and pushed (no official image yet) |
+| Server | Variable | Port | Image |
+| ------ | -------- | ---- | ----- |
+| Timesketch MCP | `deploy_timesketch_mcp` | 8081 | `ghcr.io/<owner>/timesketch-mcp-server:latest` (built by [.github/workflows/build-mcp-servers.yml](../.github/workflows/build-mcp-servers.yml)) |
+| OpenRelik MCP | `deploy_openrelik_mcp` | 7070 | `ghcr.io/openrelik/openrelik-mcp-server:latest` (upstream) |
+| Yeti MCP | `deploy_yeti_mcp` | 8082 | `ghcr.io/<owner>/yeti-mcp-server:latest` (built by the same workflow) |
 
 ### Enabling an MCP server
 
-1. Set the corresponding variable to `true` in `terraform/variables.tf`.
-2. Create the required Kubernetes secret with the API key (see comments in each `.tf` file for exact commands).
-3. Run `terraform apply`.
-4. Verify with `.\scripts\manage-osdfir-lab.ps1 status` — the MCP service should appear in the services list.
+1. Flip the corresponding variable to `true` in [terraform/variables.tf](../terraform/variables.tf).
+2. Run `./scripts/manage-osdfir-lab.ps1 deploy`.
+3. Run `./scripts/manage-osdfir-lab.ps1 mcp-setup` — it walks you through supplying API keys for the OpenRelik / Yeti MCPs (Timesketch reuses the existing Timesketch secret, so no extra key needed).
 
 ### MCP server sources
 
@@ -80,37 +112,18 @@ kubectl rollout restart deployment/ollama -n osdfir
 - **OpenRelik**: <https://github.com/openrelik/openrelik-mcp-server>
 - **Yeti**: <https://github.com/yeti-platform/yeti-mcp>
 
-## Usage
+## Verification checklist after an update
 
-To run the update script, open a PowerShell terminal, navigate to the project root directory, and execute the following command:
+- `./scripts/manage-osdfir-lab.ps1 status` — all pods Running / 1/1.
+- `./scripts/manage-osdfir-lab.ps1 logs` — reports no problem pods.
+- `./scripts/manage-osdfir-lab.ps1 creds` — Timesketch and OpenRelik appear, `admin`/`admin` logins work.
+- `./scripts/manage-osdfir-lab.ps1 ollama` — pod Running, model listed, sample prompts return text.
+- If Yeti or HashR are enabled, confirm their pods come up (they're off by default).
+- If the update touched `osdfir_chart_version`, check `CHANGELOG.md` — the auto-update workflow appends a line with the upstream release URL so you can skim the upstream release notes before merging.
 
-```powershell
-.\scripts\update-osdfir-lab.ps1
-```
+## Historical note
 
-### Parameters
-
-You can modify the script's behavior using the following optional parameters:
-
--   `-Force`: Skips the confirmation prompt and runs the script non-interactively.
--   `-NoBackup`: Disables the automatic backup of the project directory.
--   `-DryRun`: Performs a "dry run" of the update process. It will show you what actions would be taken without actually making any changes to your files.
--   `-Help`: Displays the help message for the script.
-
-### Example
-
-To run the update without any interactive prompts:
-
-```powershell
-.\scripts\update-osdfir-lab.ps1 -Force
-```
-
-## Update Process
-
-The script performs the following steps:
-
-1.  **Backup**: Creates a `.zip` backup of the entire project directory (except for the `backups` folder itself) and stores it in the `backups/` directory. This can be skipped with the `-NoBackup` flag.
-2.  **Fetch Latest Release**: Connects to the GitHub API to find the latest release of the `google/osdfir-infrastructure` repository.
-3.  **Download & Extract**: Downloads the latest release package (`.tgz`), clears the contents of the local `helm/` directory, and extracts the new charts into it.
-4.  **helm-addons**: Leave templates in `helm-addons/` untouched; use values in `configs/osdfir-lab-values.yaml` to customize behavior.
-5.  **Apply Custom Patches**: Copies any custom configuration files from `configs/update/` into the project, overwriting the newly updated files. This ensures your local modifications are preserved.
+Earlier versions of the repo shipped a separate `scripts/update-osdfir-lab.ps1`
+that downloaded chart release tarballs and applied custom patches from
+`configs/update/`. That flow is gone — chart upgrades now happen through
+Helm directly (via Terraform) using versioned pulls from the chart repo.

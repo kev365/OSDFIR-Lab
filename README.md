@@ -1,12 +1,12 @@
 
-![Version](https://img.shields.io/badge/version-20260319-orange)
+![Version](https://img.shields.io/badge/version-20260419-orange)
 ![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) 
 ![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 # OSDFIR Lab
 
-**Version:** 20260319
+**Version:** 20260419
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -115,7 +115,11 @@ Default login for every tool: **`admin` / `admin`** (static lab credentials — 
 ### Cleanup
 
 ```powershell
-./scripts/manage-osdfir-lab.ps1 teardown-lab
+# Clean shutdown, preserves AI models and data for a fast redeploy:
+./scripts/manage-osdfir-lab.ps1 shutdown-lab
+
+# Nuclear option - wipes the Minikube cluster, AI models, and all data:
+./scripts/manage-osdfir-lab.ps1 destroy-lab
 ```
 
 ## Components
@@ -165,25 +169,43 @@ OpenSearch images use the rolling `3` tag to auto-pick up the latest 3.x build o
 
 ## Management
 
-The unified management script handles all operations:
+Two scripts, one responsibility each.
 
 ```powershell
+# All day-to-day operations:
 ./scripts/manage-osdfir-lab.ps1 [action]
 
-# Key actions:
-deploy            # Full deployment
-status            # Check everything
-start/stop        # Service access
-creds             # Login credentials
-ollama            # AI model status
-teardown-lab-all  # Complete cleanup
+# Key actions: deploy, status, start/stop, creds, logs, ollama,
+# shutdown-lab (clean), destroy-lab (nuclear), mcp-setup
+./scripts/manage-osdfir-lab.ps1 help         # full list + descriptions
 ```
 
-For manual control or troubleshooting, see [commands.md](commands.md).
+```powershell
+# OpenRelik worker toggles (47 workers, 2 enabled by default):
+./scripts/manage-openrelik-workers.ps1 list
+./scripts/manage-openrelik-workers.ps1 enable plaso
+./scripts/manage-openrelik-workers.ps1 disable hayabusa
+```
+
+You can also toggle workers during a deploy:
+
+```powershell
+./scripts/manage-osdfir-lab.ps1 deploy -Enable "plaso,yara" -Disable "strings"
+```
+
+### Keeping the chart version current
+
+A weekly GitHub Action ([.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
+checks the upstream `osdfir-infrastructure` chart and opens an auto-merging
+PR when a new version is available. The PR edits `terraform/variables.tf`,
+`README.md`, and appends a line under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md). You just pull `main` and redeploy.
+
+Requires **"Allow auto-merge"** enabled in repo Settings -> General.
 
 ## Useful Resources
 
-- **[Updating the Lab](updating_osdfir_lab.md)** - Instructions for updating the lab components.
+- **[Updating the Lab](docs/updating_osdfir_lab.md)** - How versions flow through the lab: what's automated, what's manual, and the full update/verification checklist.
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
 ## Troubleshooting Tips

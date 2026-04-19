@@ -44,7 +44,7 @@ resource "kubernetes_deployment" "yeti_mcp_server" {
       spec {
         container {
           name              = "yeti-mcp-server"
-          image             = "ghcr.io/${var.github_repository}/yeti-mcp-server:latest"
+          image             = "ghcr.io/${split("/", var.github_repository)[0]}/yeti-mcp-server:latest"
           image_pull_policy = "IfNotPresent"
           command           = ["uv", "run", "python", "-m", "src.server", "--mcp-host", "0.0.0.0", "--mcp-port", "8082"]
 
