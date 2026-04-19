@@ -1,0 +1,137 @@
+name: Check osdfir-infrastructure chart version
+
+on:
+  schedule:
+    # Weekly, Monday 07:00 UTC
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch upstream chart version
+        id: upstream
+        run: |
+          set -euo pipefail
+          VERSION=$(curl -fsSL https://raw.githubusercontent.com/google/osdfir-infrastructure/main/charts/osdfir-infrastructure/Chart.yaml \
+            | grep -E '^version:' \
+            | head -1 \
+            | awk '{print $2}' \
+            | tr -d '"')
+          if [ -z "$VERSION" ]; then
+            echo "::error::Failed to parse upstream chart version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Upstream version: $VERSION"
+
+      - name: Read local chart version
+        id: local
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/variable "osdfir_chart_version"/,/^}/' terraform/variables.tf \
+            | grep -E 'default\s*=\s*"[0-9]' \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
+            | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Failed to parse local chart version from terraform/variables.tf"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Local version: $VERSION"
+
+      - name: Compare versions
+        id: compare
+        env:
+          UPSTREAM: ${{ steps.upstream.outputs.version }}
+          LOCAL: ${{ steps.local.outputs.version }}
+        run: |
+          if [ "$UPSTREAM" = "$LOCAL" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Chart version is up to date ($LOCAL). No PR needed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Chart update available: $LOCAL -> $UPSTREAM"
+          fi
+
+      - name: Update files
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          OLD: ${{ steps.local.outputs.version }}
+          NEW: ${{ steps.upstream.outputs.version }}
+        run: |
+          set -euo pipefail
+          # terraform/variables.tf — scoped to the osdfir_chart_version block
+          sed -i '/^variable "osdfir_chart_version"/,/^}/ {
+            s|default     = "'"$OLD"'"|default     = "'"$NEW"'"|
+          }' terraform/variables.tf
+
+          # README.md — chart version line
+          sed -i 's|`osdfir-infrastructure` Helm chart: \*\*'"$OLD"'\*\*|`osdfir-infrastructure` Helm chart: **'"$NEW"'**|' README.md
+
+          # CHANGELOG.md — append a generic entry under [Unreleased]. Workflow has no
+          # visibility into the upstream chart's actual diff, so the entry is generic
+          # and includes a link to the upstream release for humans to expand later.
+          RELEASE_URL="https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-${NEW}"
+          ENTRY="- Bumped \`osdfir-infrastructure\` chart **${OLD} → ${NEW}** (automated). See upstream: ${RELEASE_URL}"
+          if grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            # Insert '### Changed' + entry directly under the [Unreleased] header.
+            # Using awk because sed multi-line insertion is brittle across BSD/GNU.
+            awk -v entry="$ENTRY" '
+              /^## \[Unreleased\]/ {
+                print
+                print ""
+                print "### Changed"
+                print entry
+                inserted = 1
+                next
+              }
+              { print }
+              END { if (!inserted) exit 1 }
+            ' CHANGELOG.md > CHANGELOG.md.new && mv CHANGELOG.md.new CHANGELOG.md
+          else
+            echo "::warning::No [Unreleased] section found in CHANGELOG.md; skipping changelog update"
+          fi
+
+          echo "Diff:"
+          git --no-pager diff
+
+      - name: Create pull request
+        if: steps.compare.outputs.changed == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: bump osdfir-infrastructure chart ${{ steps.local.outputs.version }} -> ${{ steps.upstream.outputs.version }}"
+          title: "chore: bump osdfir-infrastructure chart to ${{ steps.upstream.outputs.version }}"
+          body: |
+            Automated bump of the osdfir-infrastructure Helm chart.
+
+            - `${{ steps.local.outputs.version }}` → `${{ steps.upstream.outputs.version }}`
+            - Upstream: https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-${{ steps.upstream.outputs.version }}
+
+            Files updated:
+            - `terraform/variables.tf`
+            - `README.md`
+            - `CHANGELOG.md` (entry appended under `## [Unreleased]`)
+
+            Auto-merge is enabled on this PR. It will merge when repo auto-merge is enabled in settings and all required checks pass (if any).
+          branch: chore/bump-chart-${{ steps.upstream.outputs.version }}
+          delete-branch: true
+          labels: automated,dependencies
+
+      - name: Enable auto-merge
+        if: steps.compare.outputs.changed == 'true' && steps.cpr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          # Requires "Allow auto-merge" to be enabled in repo Settings > General.
+          gh pr merge --auto --squash "$PR" || echo "::warning::Could not enable auto-merge (check repo settings)"

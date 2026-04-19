@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to a `YYYYMMDD` versioning scheme.
 
+Automated entries prepended by the `check-chart-version` workflow go under `## [Unreleased]`.
+Promote them to a dated section when cutting a known-good state.
+
+## [Unreleased]
+
+## [20260419] - 2026-04-19
+
+### Added
+- Weekly GitHub Action (`.github/workflows/check-chart-version.yml`) that checks upstream
+  `osdfir-infrastructure` and opens an auto-merging PR when a new chart version is available;
+  the PR also appends an entry to this changelog.
+- New OpenRelik community workers in the catalog (all disabled by default):
+  `amcache-evilhunter`, `hindsight`, `ip-extractor`.
+- `enable-all` / `disable-all` actions in `scripts/manage-openrelik-workers.ps1` with
+  a confirmation prompt that warns about cluster load.
+- Post-deploy step that calls `tsctl add_user -u admin -p admin` so Timesketch UI login
+  is a predictable `admin / admin` across tear-down/redeploy cycles.
+
+### Changed
+- Bumped `osdfir-infrastructure` Helm chart **2.8.4 → 2.8.6**.
+- OpenSearch and OpenSearch Dashboards images pinned to the rolling `3` tag (latest 3.x,
+  will not move to 4.x).
+- Enabled the OpenSearch Dashboards ingress via Timesketch at `/opensearch`.
+- Simplified credentials: every tool login is now static `admin / admin`. Random
+  backend passwords removed; test-lab context only (see README disclaimer).
+- MCP server image path flattened from `ghcr.io/<owner>/<repo>/timesketch-mcp-server`
+  to `ghcr.io/<owner>/timesketch-mcp-server`. Old GHCR packages were deleted manually.
+- OpenRelik worker catalog defaults: only `strings` and `grep` enabled; all others off.
+  Enable per-worker with `manage-openrelik-workers.ps1 enable <name>`.
+- Deploy script output now prints service URLs, static admin creds, and a pointer to
+  `manage-openrelik-workers.ps1` on completion.
+- README: new Installation section (clone `main`; no tagged releases), refreshed version
+  baseline, documented the auto-update workflow.
+
+### Removed
+- All `random_password` resources from `terraform/secrets.tf` and the `random` provider
+  from `terraform/main.tf`.
+- "No-image" / build-from-source community worker entries from the catalog.
+
 ## [20260319] - 2026-03-19
 
 ### Changed

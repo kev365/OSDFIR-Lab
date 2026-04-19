@@ -1,8 +1,15 @@
 # Read AI configuration from values file
 locals {
-  values_yaml = yamldecode(file("${path.module}/../configs/osdfir-lab-values.yaml"))
-  ai_config          = local.values_yaml.ai
-  openrelik_enabled  = try(local.values_yaml.global.openrelik.enabled, false)
+  values_yaml       = yamldecode(file("${path.module}/../configs/osdfir-lab-values.yaml"))
+  ai_config         = local.values_yaml.ai
+  openrelik_enabled = try(local.values_yaml.global.openrelik.enabled, false)
+
+  # The openrelik-worker-timesketch workaround below only needs to run when
+  # that specific worker is enabled in the consolidated openrelik.workers list.
+  timesketch_worker_enabled = try(length([
+    for w in local.values_yaml.openrelik.workers :
+      w if w.name == "openrelik-worker-timesketch" && try(w.enabled, false)
+  ]), 0) > 0
 }
 
 # Ollama deployment
@@ -269,7 +276,7 @@ resource "null_resource" "openrelik_api_llm_env" {
 # causing TIMESKETCH_PASSWORD to be empty. This patches the worker with the
 # correct password from the Timesketch secret.
 resource "null_resource" "openrelik_timesketch_worker_fix" {
-  count = local.openrelik_enabled ? 1 : 0
+  count = local.openrelik_enabled && local.timesketch_worker_enabled ? 1 : 0
 
   triggers = {
     helm_release = var.osdfir_chart_version

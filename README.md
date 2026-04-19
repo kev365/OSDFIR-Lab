@@ -62,6 +62,17 @@ osdfir-lab/
 - Disk: 40GB
 - Kubernetes version: stable
 
+## Installation
+
+Clone (or fork) the repository — `main` tracks the latest tested state. There are no tagged releases; pull the latest `main` and redeploy when you want updates.
+
+```bash
+git clone https://github.com/kev365/OSDFIR-Lab.git
+cd OSDFIR-Lab
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for notable changes.
+
 ## Quick Start
 
 ### One-Command Deployment
@@ -80,18 +91,25 @@ This automatically handles:
 
 ### Access Your Lab
 
+Default login for every tool: **`admin` / `admin`** (static lab credentials — see Disclaimer).
+
 ```powershell
 # Check status
 ./scripts/manage-osdfir-lab.ps1 status
 
-# Get login credentials
+# Show login credentials
 ./scripts/manage-osdfir-lab.ps1 creds
 
+# Manage OpenRelik workers (enable/disable individual workers)
+./scripts/manage-openrelik-workers.ps1 list
+./scripts/manage-openrelik-workers.ps1 enable plaso
+
 # Access services at:
-# - Timesketch: http://localhost:5000
-# - OpenRelik: http://localhost:8711
-# - OpenRelik API: http://localhost:8710
-# - Yeti: http://localhost:9000
+# - Timesketch:         http://localhost:5000
+# - OpenRelik:          http://localhost:8711
+# - OpenRelik API:      http://localhost:8710
+# - Yeti:               http://localhost:9000
+# - OpenSearch Dashboards: via Timesketch at /opensearch
 ```
 
 ### Cleanup
@@ -116,15 +134,19 @@ This automatically handles:
 - **Helm** - Package management (pulls upstream `osdfir-infrastructure` chart)
 - **Docker Desktop** - Container runtime
 
-### Component Versions (20260319 baseline)
+### Component Versions
 
-- `osdfir-infrastructure` Helm chart: **2.8.4**
-- Timesketch image: **20260311** (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
+- `osdfir-infrastructure` Helm chart: **2.8.6**
+- Timesketch image: **20260311** (nginx `1.25.5-alpine-slim`, OpenSearch `3` (rolling 3.x), Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
+- OpenSearch Dashboards: **3** (rolling 3.x, exposed at `/opensearch` via the Timesketch host)
 - OpenRelik core services: **0.7.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.5.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.6.0`)
 - Prometheus (OpenRelik): **v3.10.0**
 - Yeti: **2.5.0** (Redis `7.4.2-alpine`, ArangoDB `3.11.8`)
 - HashR: **v1.8.2** (Postgres `17.2-alpine`)
-- Ollama model: **smollm:latest**
+- Ollama image: **latest** (pinned via `terraform/ollama.tf`)
+- Ollama model: `qwen2.5:0.5b` (configurable via `terraform/variables.tf`)
+
+OpenSearch images use the rolling `3` tag to auto-pick up the latest 3.x build on pod restart. They will not automatically move to 4.x. The `osdfir-infrastructure` chart version is bumped via a weekly GitHub Action (`.github/workflows/check-chart-version.yml`) that opens an auto-merging PR when an upstream chart update is available; that PR also appends an entry to [CHANGELOG.md](CHANGELOG.md).
 
 ## 🚧 Work in Progress
 

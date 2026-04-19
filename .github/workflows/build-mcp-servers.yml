@@ -41,7 +41,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ github.repository }}/timesketch-mcp-server
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/timesketch-mcp-server
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -83,7 +83,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ github.repository }}/yeti-mcp-server
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/yeti-mcp-server
         tags: |
           type=ref,event=branch
           type=ref,event=pr

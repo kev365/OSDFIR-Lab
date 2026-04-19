@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("help", "status", "start", "stop", "restart", "logs", "cleanup", "creds", "jobs", "helm", "uninstall", "reinstall", "storage", "minikube", "deploy", "shutdown-lab", "shutdown-lab-all", "ollama", "ollama-test", "docker", "mcp-setup")]
+    [ValidateSet("help", "status", "start", "stop", "restart", "logs", "creds", "jobs", "uninstall", "storage", "minikube", "deploy", "shutdown-lab", "destroy-lab", "ollama", "docker", "mcp-setup")]
     [string]$Action = "help",
     
     [Parameter(Mandatory = $false)]
@@ -21,7 +21,17 @@ param(
     
     # Cleanup and deployment options
     [switch]$Force = $false,
-    [switch]$DryRun = $false
+    [switch]$DryRun = $false,
+    # For `logs`: default shows only problem pods. `-All` shows every pod's tail.
+    [switch]$All = $false,
+
+    # Worker toggles for `deploy`. Accept a comma-separated list of worker
+    # short names from configs/openrelik-workers.yaml.
+    # Example: deploy -Enable "grep,strings,plaso" -Disable "eztools,capa"
+    [Parameter(Mandatory = $false)]
+    [string]$Enable,
+    [Parameter(Mandatory = $false)]
+    [string]$Disable
 )
 
 # Color constants
@@ -88,51 +98,54 @@ function Show-Help {
     Write-Host "Usage: $ScriptCmd [action] [options]" -ForegroundColor $Colors.Warning
     Write-Host ""
     Write-Host "DEPLOYMENT + TEARDOWN:" -ForegroundColor $Colors.Success
-    Write-Host "  deploy           - Full deployment (Docker + Minikube + Terraform + Services)"
-    Write-Host "  shutdown-lab     - Smart cleanup (Services + Terraform, PRESERVES AI models/data)" -ForegroundColor $Colors.Header
-    Write-Host "  shutdown-lab-all - Complete destruction (Everything including AI models/data)" -ForegroundColor $Colors.Error
-    Write-Host "  docker           - Check and start Docker Desktop if needed"
+    Write-Host "  deploy         - Full deployment (Docker + Minikube + Terraform + Services)"
+    Write-Host "  shutdown-lab   - Clean shutdown via terraform destroy (preserves AI models & data)" -ForegroundColor $Colors.Header
+    Write-Host "  destroy-lab    - Complete destruction (deletes Minikube cluster, AI models, data)" -ForegroundColor $Colors.Error
+    Write-Host "  uninstall      - Helm-uninstall the release only (pods gone, Minikube + data stay)"
+    Write-Host "  docker         - Ensure Docker Desktop is running and print its version"
     Write-Host ""
     Write-Host "STATUS + MONITORING:" -ForegroundColor $Colors.Success
-    Write-Host "  status       - Show deployment and service status"
-    Write-Host "  minikube     - Show Minikube cluster status"
-    Write-Host "  helm         - List Helm releases and show release status"
-    Write-Host "  storage      - Show PV storage utilization"
-    Write-Host "  jobs         - Manage background jobs"
-    Write-Host "  logs         - Show logs from services"
+    Write-Host "  status         - Show deployment + pod + port-forward summary"
+    Write-Host "  minikube       - Show Minikube cluster + tunnel job status"
+    Write-Host "  storage        - Show PV/PVC storage utilization"
+    Write-Host "  jobs           - List background PowerShell jobs (tunnel + port-forwards)"
+    Write-Host "  logs           - Show logs for problem pods (add -All for every pod)"
     Write-Host ""
     Write-Host "SERVICE ACCESS:" -ForegroundColor $Colors.Success
-    Write-Host "  start        - Start port forwarding for services"
-    Write-Host "  stop         - Stop port forwarding jobs"
-    Write-Host "  restart      - Restart port forwarding jobs"
-    Write-Host "  creds        - Get service credentials"
+    Write-Host "  start          - Start port forwarding for all deployed UIs"
+    Write-Host "  stop           - Stop port forwarding jobs (pods stay running in the cluster)"
+    Write-Host "  restart        - Stop and re-start port forwarding jobs"
+    Write-Host "  creds          - Show UI credentials (admin/admin) for deployed services"
     Write-Host ""
     Write-Host "AI + SPECIALIZED:" -ForegroundColor $Colors.Success
-    Write-Host "  ollama       - Show Ollama AI model status and connectivity"
-    Write-Host "  ollama-test  - Run comprehensive AI prompt testing"
-    Write-Host "  mcp-setup    - Configure MCP server API keys and secrets"
+    Write-Host "  ollama         - Show Ollama pod + models, then run built-in prompt tests"
+    Write-Host "  mcp-setup      - Configure/enable MCP server API keys and secrets"
     Write-Host ""
-    Write-Host "MAINTENANCE:" -ForegroundColor $Colors.Success
-    Write-Host "  cleanup      - Clean up OSDFIR deployment"
-    Write-Host "  uninstall    - Uninstall the Helm release"
-    Write-Host "  reinstall    - Reinstall the Helm release (uninstall + deploy)"
-    Write-Host "  help         - Show this help message"
+    Write-Host "OpenRelik workers are managed by a separate script. Examples:" -ForegroundColor $Colors.Gray
+    Write-Host "  .\scripts\manage-openrelik-workers.ps1 list" -ForegroundColor $Colors.Command
+    Write-Host "  .\scripts\manage-openrelik-workers.ps1 enable plaso" -ForegroundColor $Colors.Command
+    Write-Host "  .\scripts\manage-openrelik-workers.ps1 disable hayabusa" -ForegroundColor $Colors.Command
     Write-Host ""
     Write-Host "Options:" -ForegroundColor $Colors.Header
-    Write-Host "  -h                Show help (alias for help action)"
-    Write-Host "  -Service          Specific service for creds (all, timesketch, openrelik)"
-    Write-Host "  -Force            Force operations without confirmation"
-    Write-Host "  -DryRun           Show what would be done without executing"
+    Write-Host "  -h                Show help (alias for 'help')"
+    Write-Host "  -Service          Filter creds/logs by service (all, timesketch, openrelik, yeti)"
+    Write-Host "  -All              (logs only) Include logs for healthy pods too"
+    Write-Host "  -Force            Skip confirmation prompts on destructive actions"
+    Write-Host "  -DryRun           Show what would happen without executing (deploy + cleanup)"
+    Write-Host "  -Enable <names>   (deploy only) Comma-separated worker short names to enable"
+    Write-Host "  -Disable <names>  (deploy only) Comma-separated worker short names to disable"
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor $Colors.Header
     Write-Host "  $ScriptCmd -h"
-    Write-Host "  $ScriptCmd docker"
-    Write-Host "  $ScriptCmd deploy            # Preserves passwords if they exist"
-    Write-Host "  $ScriptCmd reinstall         # Reinstall while preserving passwords"
-    Write-Host "  $ScriptCmd shutdown-lab      # Smart cleanup - preserves AI models/data" -ForegroundColor $Colors.Header
-    Write-Host "  $ScriptCmd shutdown-lab-all  # Nuclear option - destroys everything" -ForegroundColor $Colors.Error
+    Write-Host "  $ScriptCmd deploy"
+    Write-Host "  $ScriptCmd deploy -Enable `"grep,strings,plaso`" -Disable `"eztools`""
     Write-Host "  $ScriptCmd status"
+    Write-Host "  $ScriptCmd creds"
     Write-Host "  $ScriptCmd creds -Service timesketch"
+    Write-Host "  $ScriptCmd logs                          # problem pods only"
+    Write-Host "  $ScriptCmd logs -All                     # every pod"
+    Write-Host "  $ScriptCmd shutdown-lab                  # preserves AI models + data" -ForegroundColor $Colors.Header
+    Write-Host "  $ScriptCmd destroy-lab                   # nuclear option - removes everything" -ForegroundColor $Colors.Error
 }
 
 function Test-Prerequisites {
@@ -528,103 +541,107 @@ function Show-MinikubeStatus {
     $tunnelJob = Get-Job -Name "minikube-tunnel" -ErrorAction SilentlyContinue
     if ($tunnelJob) {
         $status = switch ($tunnelJob.State) {
-            "Running" { "[RUNNING]" }
+            "Running"   { "[RUNNING]" }
             "Completed" { "[STOPPED]" }
-            "Failed" { "[FAILED]" }
-            default { "[UNKNOWN]" }
+            "Stopped"   { "[STOPPED]" }
+            "Failed"    { "[FAILED]" }
+            default     { "[$($tunnelJob.State.ToString().ToUpper())]" }
         }
         $color = switch ($tunnelJob.State) {
             "Running" { $Colors.Success }
-            "Failed" { $Colors.Error }
-            default { $Colors.Warning }
+            "Failed"  { $Colors.Error }
+            default   { $Colors.Warning }
         }
         Write-Host "  $status Minikube tunnel" -ForegroundColor $color
+        if ($tunnelJob.State -ne "Running") {
+            Write-Host "  (Minikube tunnel jobs can stop after OS sleep / Docker restart." -ForegroundColor $Colors.Gray
+            Write-Host "   Run '$ScriptCmd start' to re-establish it.)" -ForegroundColor $Colors.Gray
+        }
     } else {
         Write-Host "  [NOT RUNNING] Minikube tunnel" -ForegroundColor $Colors.Warning
+        Write-Host "  Run '$ScriptCmd start' to start the tunnel." -ForegroundColor $Colors.Gray
     }
 }
 
 function Show-OllamaStatus {
-    Show-Header "Ollama AI Model Status"
-    
+    Show-Header "Ollama AI Status and Prompt Tests"
+
     if (-not (Test-KubectlAccess)) {
         return
     }
-    
+
     # Check Ollama pod status
     Write-Host "Ollama Pod Status:" -ForegroundColor $Colors.Success
     $ollamaPod = kubectl get pods -n $Namespace -l app=ollama --no-headers 2>$null
-    if ($ollamaPod) {
-        $parts = $ollamaPod -split '\s+'
-        $name = $parts[0]
-        $status = $parts[2]
-        if ($status -eq "Running") {
-            Write-Host "  [OK] $name" -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "  [ERROR] $name ($status)" -ForegroundColor $Colors.Error
-        }
-    } else {
+    if (-not $ollamaPod) {
         Write-Host "  [ERROR] Ollama pod not found" -ForegroundColor $Colors.Error
         return
     }
-    
-    # Check available models
+    $parts  = $ollamaPod -split '\s+'
+    $name   = $parts[0]
+    $status = $parts[2]
+    if ($status -eq "Running") {
+        Write-Host "  [OK] $name" -ForegroundColor $Colors.Success
+    } else {
+        Write-Host "  [ERROR] $name ($status)" -ForegroundColor $Colors.Error
+        return
+    }
+
+    # List available models
     Write-Host ""
     Write-Host "Available Models:" -ForegroundColor $Colors.Success
     $availableModels = @()
-    try {
-        $modelOutput = kubectl exec -n $Namespace $name -- ollama list 2>$null
-        if ($modelOutput) {
-            $lines = $modelOutput -split "`n"
-            $modelLines = $lines | Where-Object { $_ -match "^\w+.*\d+\s+(GB|MB|KB)" }
-            
-            if ($modelLines.Count -gt 0) {
-                foreach ($line in $modelLines) {
-                    $parts = $line -split '\s+'
-                    $modelName = $parts[0]
-                    $modelSize = "$($parts[2]) $($parts[3])"
-                    $availableModels += $modelName
-                    Write-Host "  [OK] $modelName (Size: $modelSize)" -ForegroundColor $Colors.Success
-                }
-            } else {
-                Write-Host "  [INFO] No models found" -ForegroundColor $Colors.Warning
-            }
-        } else {
-            Write-Host "  [ERROR] Unable to retrieve model list" -ForegroundColor $Colors.Error
+    $modelOutput = kubectl exec -n $Namespace $name -- ollama list 2>$null
+    if ($modelOutput) {
+        $modelLines = ($modelOutput -split "`n") | Where-Object { $_ -match "^\w+.*\d+\s+(GB|MB|KB)" }
+        foreach ($line in $modelLines) {
+            $p = $line -split '\s+'
+            $availableModels += $p[0]
+            Write-Host "  [OK] $($p[0]) (Size: $($p[2]) $($p[3]))" -ForegroundColor $Colors.Success
         }
-    } catch {
-        Write-Host "  [ERROR] Failed to check models: $($_.Exception.Message)" -ForegroundColor $Colors.Error
     }
-    
-    # Test AI functionality if models available
-    if ($availableModels.Count -gt 0) {
-        Write-Host ""
-        Write-Host "AI Functionality Test:" -ForegroundColor $Colors.Success
-        $testModel = $availableModels[0]
-        try {
-            Write-Host "  Testing model '$testModel' with forensic prompt..." -ForegroundColor $Colors.Info
-            $testPrompt = "Name 3 common digital forensics file types in a single comma-separated line."
-            Write-Host ""
-            Write-Host "  Prompt:" -ForegroundColor $Colors.Info
-            Write-Host "    $testPrompt" -ForegroundColor $Colors.Gray
-            $promptResult = kubectl exec -n $Namespace $name -- sh -c "echo '$testPrompt' | ollama run $testModel 2>/dev/null" 2>$null
-            # Strip ANSI escape codes in PowerShell
-            $cleaned = $promptResult -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
-            $responseText = ($cleaned -join "`n").Trim()
+    if ($availableModels.Count -eq 0) {
+        Write-Host "  [INFO] No models found" -ForegroundColor $Colors.Warning
+        return
+    }
 
-            if ($responseText -and $responseText.Trim().Length -gt 0) {
-                Write-Host "  [OK] AI model is responding to prompts" -ForegroundColor $Colors.Success
-                Write-Host "  Response:" -ForegroundColor $Colors.Info
-                foreach ($line in $responseText -split "`n") {
+    # Run the built-in prompt suite against the first model
+    $testModel = $availableModels[0]
+    Write-Host ""
+    Write-Host "Testing model '$testModel' with sample prompts (a few moments each)..." -ForegroundColor $Colors.Info
+
+    $testPrompts = @(
+        "Name 3 common digital forensics file types in a single comma-separated line.",
+        "Tell me a one-liner pun about digital forensics.",
+        "Write a single haiku about finding deleted files."
+    )
+
+    $testNum = 0
+    foreach ($prompt in $testPrompts) {
+        $testNum++
+        Write-Host ""
+        Write-Host "Test ${testNum} of $($testPrompts.Count):" -ForegroundColor $Colors.Header
+        Write-Host "  Prompt: $prompt" -ForegroundColor $Colors.Gray
+        try {
+            $escaped = $prompt -replace "'", "'\''"
+            $result  = kubectl exec -n $Namespace $name -- sh -c "echo '$escaped' | ollama run $testModel 2>/dev/null" 2>$null
+            $cleaned = $result -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
+            $response = ($cleaned -join "`n").Trim()
+
+            if ($response -and $response.Length -gt 0) {
+                Write-Host "  Response:" -ForegroundColor $Colors.Success
+                foreach ($line in $response -split "`n") {
                     Write-Host "    $line" -ForegroundColor $Colors.Gray
                 }
             } else {
                 Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
             }
         } catch {
-            Write-Host "  [WARNING] Unable to test AI functionality: $($_.Exception.Message)" -ForegroundColor $Colors.Warning
+            Write-Host "  [WARNING] $($_.Exception.Message)" -ForegroundColor $Colors.Warning
         }
     }
+    Write-Host ""
+    Write-Host "Ollama checks complete." -ForegroundColor $Colors.Success
 }
 
 function Show-Status {
@@ -796,78 +813,310 @@ function Start-Services {
     }
 }
 
-function Get-ServiceCredential {
-    param($ServiceName, $SecretName, $SecretKey, $Username, $ServiceUrl)
-    
+function Build-WorkerOverride {
+    # Generate configs/osdfir-lab-workers.generated.yaml containing only the
+    # openrelik.workers entries that are both enabled AND have a deployable
+    # image. Terraform passes this file to helm_release AFTER osdfir-lab-values.yaml
+    # so the workers array is replaced (Helm uses list-replace, not list-merge).
+    # Net effect: Helm creates Deployments only for workers that are enabled AND
+    # have an image; no-image entries stay purely informational.
+    #
+    # Returns $true on success.
+    $valuesPath   = Join-Path $PSScriptRoot "..\configs\osdfir-lab-values.yaml"
+    $overridePath = Join-Path $PSScriptRoot "..\configs\osdfir-lab-workers.generated.yaml"
+
+    if (-not (Test-Path $valuesPath)) {
+        Write-Host "ERROR: missing $valuesPath" -ForegroundColor $Colors.Error
+        return $false
+    }
+
+    Import-Module powershell-yaml -ErrorAction Stop
+    $values = Get-Content $valuesPath -Raw | ConvertFrom-Yaml
+
+    $baseWorkers = @()
+    if ($values.openrelik -and $values.openrelik.workers) {
+        $baseWorkers = @($values.openrelik.workers)
+    }
+
+    # Helm template only needs the fields it templates over (name, image,
+    # command, env, resources). Strip catalog metadata from the override so we
+    # don't write entries the chart doesn't use.
+    $chartFields = @('name','image','command','env','resources')
+    $filtered = @()
+    $skippedDisabled = 0
+    $skippedNoImage  = 0
+    foreach ($w in $baseWorkers) {
+        if (-not $w.enabled) { $skippedDisabled++; continue }
+        if (-not $w.image)   { $skippedNoImage++;  continue }
+        $stripped = @{}
+        foreach ($k in $chartFields) {
+            if ($w.ContainsKey($k)) { $stripped[$k] = $w[$k] }
+        }
+        $filtered += $stripped
+    }
+
+    $override = @{
+        openrelik = @{
+            workers = $filtered
+        }
+    }
+    $override | ConvertTo-Yaml | Set-Content $overridePath -Encoding UTF8
+
+    Write-Host "Generated worker override: $($filtered.Count) enabled, $skippedDisabled disabled, $skippedNoImage no-image" -ForegroundColor $Colors.Info
+    return $true
+}
+
+function Update-WorkerCatalog {
+    # Apply -Enable / -Disable tokens from `deploy` to the openrelik.workers
+    # entries in configs/osdfir-lab-values.yaml BEFORE helm runs. Tokens are
+    # worker short names ("strings") or full names ("openrelik-worker-strings").
+    # Returns $true if every token resolved.
+    param(
+        [string]$EnableTokens,
+        [string]$DisableTokens
+    )
+
+    if (-not $EnableTokens -and -not $DisableTokens) { return $true }
+
+    $valuesPath = Join-Path $PSScriptRoot "..\configs\osdfir-lab-values.yaml"
+    if (-not (Test-Path $valuesPath)) {
+        Write-Host "ERROR: values.yaml not found at $valuesPath" -ForegroundColor $Colors.Error
+        return $false
+    }
+
+    Import-Module powershell-yaml -ErrorAction Stop
+    $catalog = (Get-Content $valuesPath -Raw | ConvertFrom-Yaml).openrelik.workers
+
+    # Local helpers (closures capture $catalog / $valuesPath)
+    $resolveToken = {
+        param([string]$Token)
+        $t = $Token.Trim()
+        if (-not $t) { return $null }
+        $short = $t -replace '^openrelik-worker-', ''
+        $match = $catalog | Where-Object { ($_.name -replace '^openrelik-worker-', '') -eq $short }
+        if (-not $match) {
+            Write-Host "  ERROR: worker '$t' not found in catalog" -ForegroundColor $Colors.Error
+            return $null
+        }
+        if ($match.source -eq 'no-image') {
+            Write-Host "  WARNING: '$short' has source:no-image; enabling it has no effect until you add image/command" -ForegroundColor $Colors.Warning
+        }
+        return $short
+    }
+
+    $applyToCatalog = {
+        param([string]$ShortName, [string]$TargetState)
+        $fullName = "openrelik-worker-$ShortName"
+        $nameAlts = "(?:$([regex]::Escape($ShortName))|$([regex]::Escape($fullName)))"
+        $lines = Get-Content $valuesPath
+        $inTarget = $false
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^\s*-\s*name:\s*$nameAlts\s*$") { $inTarget = $true; continue }
+            if ($inTarget -and $lines[$i] -match '^\s*-\s*name:') { break }
+            if ($inTarget -and $lines[$i] -match '^\s*enabled:\s*(true|false)') {
+                $lines[$i] = $lines[$i] -replace 'enabled:\s*(true|false)', "enabled: $TargetState"
+                break
+            }
+        }
+        $lines | Set-Content $valuesPath -Encoding UTF8
+    }
+
+    $allOk = $true
+
+    if ($EnableTokens) {
+        Write-Host "Applying -Enable to worker catalog..." -ForegroundColor $Colors.Info
+        foreach ($tok in ($EnableTokens -split ',')) {
+            $name = & $resolveToken $tok
+            if ($name) {
+                & $applyToCatalog $name 'true'
+                Write-Host "  enabled: $name" -ForegroundColor $Colors.Success
+            } else {
+                $allOk = $false
+            }
+        }
+    }
+
+    if ($DisableTokens) {
+        Write-Host "Applying -Disable to worker catalog..." -ForegroundColor $Colors.Info
+        foreach ($tok in ($DisableTokens -split ',')) {
+            $name = & $resolveToken $tok
+            if ($name) {
+                & $applyToCatalog $name 'false'
+                Write-Host "  disabled: $name" -ForegroundColor $Colors.Success
+            } else {
+                $allOk = $false
+            }
+        }
+    }
+
+    return $allOk
+}
+
+function Invoke-HelmPull {
+    # Pre-pull the osdfir-infrastructure chart tarball into terraform/chart-cache/
+    # so the terraform helm provider can resolve it at plan time. Reads the chart
+    # version from terraform/variables.tf so there's a single source of truth.
+    # Returns $true on success, $false otherwise.
+    $varsPath = Join-Path $PSScriptRoot "..\terraform\variables.tf"
+    if (-not (Test-Path $varsPath)) {
+        Write-Host "ERROR: Could not find $varsPath" -ForegroundColor $Colors.Error
+        return $false
+    }
+
+    $match = Select-String -Path $varsPath -Pattern 'default\s*=\s*"(\d+\.\d+\.\d+)"' | Select-Object -First 1
+    if (-not $match) {
+        Write-Host "ERROR: Could not parse osdfir_chart_version from $varsPath" -ForegroundColor $Colors.Error
+        return $false
+    }
+    $chartVersion = $match.Matches[0].Groups[1].Value
+
+    $cacheDir = Join-Path $PSScriptRoot "..\terraform\chart-cache"
+    $tarball  = Join-Path $cacheDir "osdfir-infrastructure-$chartVersion.tgz"
+
+    if (Test-Path $tarball) {
+        Write-Host "Chart $chartVersion already cached at $tarball" -ForegroundColor $Colors.Info
+        return $true
+    }
+
+    Write-Host "Pulling osdfir-infrastructure chart $chartVersion..." -ForegroundColor $Colors.Info
+    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+
+    helm pull osdfir-infrastructure `
+        --repo https://google.github.io/osdfir-infrastructure/ `
+        --version $chartVersion `
+        --destination $cacheDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: helm pull failed (exit $LASTEXITCODE)" -ForegroundColor $Colors.Error
+        return $false
+    }
+
+    if (-not (Test-Path $tarball)) {
+        Write-Host "ERROR: helm pull succeeded but tarball not found at $tarball" -ForegroundColor $Colors.Error
+        return $false
+    }
+
+    Write-Host "Chart cached: $tarball" -ForegroundColor $Colors.Success
+    return $true
+}
+
+function Set-OpenRelikAdmin {
+    # Creates an OpenRelik admin user using admin.py inside the openrelik-server
+    # container (https://github.com/openrelik/openrelik-deploy/blob/main/docker/install.sh).
+    # Idempotent: admin.py prints "created/updated" on subsequent runs.
+    Show-Header "Configuring OpenRelik admin/admin login"
+
+    $deploy  = "$ReleaseName-openrelik-api"
+    $podLine = kubectl get pods -n $Namespace --no-headers 2>$null |
+        Where-Object { $_ -match "^$([regex]::Escape($deploy))-\S+\s+\d/\d\s+Running" } |
+        Select-Object -First 1
+
+    if (-not $podLine) {
+        Write-Host "WARNING: No running openrelik-api pod found. Skipping admin user setup." -ForegroundColor $Colors.Warning
+        Write-Host "Create the admin user manually once pods are ready:" -ForegroundColor $Colors.Info
+        Write-Host "  kubectl exec -n $Namespace deploy/$deploy -- python admin.py create-user admin --password admin --admin" -ForegroundColor $Colors.Gray
+        return
+    }
+
+    $podName = ($podLine -split '\s+')[0]
+    Write-Host "Using pod: $podName" -ForegroundColor $Colors.Info
+
+    $output = kubectl exec -n $Namespace $podName -- python admin.py create-user admin --password admin --admin 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "OpenRelik user 'admin' created or updated (password: admin)." -ForegroundColor $Colors.Success
+    } else {
+        Write-Host "WARNING: admin.py create-user did not succeed. Output:" -ForegroundColor $Colors.Warning
+        Write-Host $output.Trim() -ForegroundColor $Colors.Gray
+    }
+}
+
+function Set-TimesketchAdmin {
+    # Creates (or no-ops on) a Timesketch user 'admin' with password 'admin'.
+    # Runs post-deploy - more reliable than relying on Helm lookup() for secret pre-seeding.
+    Show-Header "Configuring Timesketch admin/admin login"
+
+    # Find a running Timesketch pod. Try the known deployment name first, then fall back to label match.
+    $podLine = kubectl get pods -n $Namespace --no-headers 2>$null |
+        Where-Object { $_ -match "^$([regex]::Escape($ReleaseName))-timesketch-\S+\s+\d/\d\s+Running" } |
+        Where-Object { $_ -notmatch '-worker|-postgres|-redis|-opensearch' } |
+        Select-Object -First 1
+
+    if (-not $podLine) {
+        Write-Host "WARNING: No running Timesketch pod found. Skipping admin user setup." -ForegroundColor $Colors.Warning
+        Write-Host "Create the admin user manually once pods are ready:" -ForegroundColor $Colors.Info
+        Write-Host "  kubectl exec -n $Namespace deploy/$ReleaseName-timesketch -- tsctl add_user -u admin -p admin" -ForegroundColor $Colors.Gray
+        return
+    }
+
+    $podName = ($podLine -split '\s+')[0]
+    Write-Host "Using pod: $podName" -ForegroundColor $Colors.Info
+
+    # Timesketch's tsctl uses `create-user` (idempotent: prints "created/updated").
+    # `add_user` exists only in older versions.
+    $output = kubectl exec -n $Namespace $podName -- tsctl create-user admin --password admin 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Timesketch user 'admin' created or updated (password: admin)." -ForegroundColor $Colors.Success
+    } else {
+        Write-Host "WARNING: tsctl create-user did not succeed. Output:" -ForegroundColor $Colors.Warning
+        Write-Host $output.Trim() -ForegroundColor $Colors.Gray
+    }
+}
+
+function Get-DeployedUIs {
+    # Returns the subset of main UI services that are actually deployed in the
+    # cluster right now. Used by the deploy final output and Show-Credentials
+    # so disabled tools (e.g. Yeti, HashR) don't appear in login prompts.
+    $candidates = @(
+        [PSCustomObject]@{ Name = "Timesketch";    Service = "$ReleaseName-timesketch";        Url = "http://localhost:5000" }
+        [PSCustomObject]@{ Name = "OpenRelik";     Service = "$ReleaseName-openrelik-nginx";   Url = "http://localhost:8711" }
+        [PSCustomObject]@{ Name = "OpenRelik API"; Service = "$ReleaseName-openrelik-nginx";   Url = "http://localhost:8710" }
+        [PSCustomObject]@{ Name = "Yeti";          Service = "$ReleaseName-yeti";              Url = "http://localhost:9000" }
+    )
+    $available = @()
+    foreach ($c in $candidates) {
+        $null = kubectl get service $c.Service -n $Namespace --no-headers 2>$null
+        if ($LASTEXITCODE -eq 0) { $available += $c }
+    }
+    return $available
+}
+
+function Show-ServiceCredential {
+    param($ServiceName, $ServiceUrl)
+
     Write-Host "$ServiceName Credentials:" -ForegroundColor $Colors.Header
     Write-Host "  Service URL: $ServiceUrl" -ForegroundColor $Colors.Success
-    Write-Host "  Username:    $Username" -ForegroundColor $Colors.Success
-    
-    try {
-        $password = kubectl get secret --namespace $Namespace $SecretName -o jsonpath="{.data.$SecretKey}" 2>$null
-        
-        if ($password) {
-            $decodedPassword = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($password))
-            Write-Host "  Password:    $decodedPassword" -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "  Password:    [Secret not found or not accessible]" -ForegroundColor $Colors.Error
-        }
-    } catch {
-        Write-Host "  Password:    [Error retrieving secret]" -ForegroundColor $Colors.Error
-    }
-    
+    Write-Host "  Username:    admin" -ForegroundColor $Colors.Success
+    Write-Host "  Password:    admin" -ForegroundColor $Colors.Success
     Write-Host ""
 }
 
 function Show-Credentials {
+    # Prints static admin/admin credentials only for UIs whose Kubernetes
+    # Service is present in the namespace. Respects -Service filter.
     Show-Header "OSDFIR Lab Service Credentials"
-    
-    # Check kubectl access
-    if (-not (Test-KubectlAccess)) {
+
+    Write-Host "Static admin/admin credentials (test lab - see README disclaimer)." -ForegroundColor $Colors.Info
+    Write-Host ""
+
+    if (-not (Test-KubectlAccess)) { return }
+
+    $deployed = Get-DeployedUIs
+    # Skip OpenRelik API in creds view (same login as the UI, not a separate endpoint)
+    $deployed = $deployed | Where-Object { $_.Name -ne "OpenRelik API" }
+
+    if ($Service -ne "all") {
+        $deployed = $deployed | Where-Object { $_.Name -match "^$Service$" -or $_.Name -match "^$Service\b" -or $_.Name.ToLower().StartsWith($Service.ToLower()) }
+    }
+
+    if (-not $deployed -or $deployed.Count -eq 0) {
+        Write-Host "No matching UI services are deployed in namespace '$Namespace'." -ForegroundColor $Colors.Warning
         return
     }
-    
-    Write-Host "Retrieving credentials for release '$ReleaseName' in namespace '$Namespace'..." -ForegroundColor $Colors.Info
-    Write-Host ""
-    
-    # Get credentials based on service parameter
-    switch ($Service) {
-        "timesketch" {
-            Get-ServiceCredential -ServiceName "Timesketch" -SecretName "$ReleaseName-timesketch-secret" -SecretKey "timesketch-user" -Username "timesketch" -ServiceUrl "http://localhost:5000"
-        }
-        
-        "openrelik" {
-            Get-ServiceCredential -ServiceName "OpenRelik" -SecretName "$ReleaseName-openrelik-secret" -SecretKey "openrelik-user" -Username "openrelik" -ServiceUrl "http://localhost:8711"
-        }
 
-        "yeti" {
-            Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "yeti-user" -Username "yeti" -ServiceUrl "http://localhost:9000"
-        }
-
-        "all" {
-            # Check which services are actually deployed
-            $timesketchSecret = kubectl get secret --namespace $Namespace "$ReleaseName-timesketch-secret" 2>$null
-            if ($timesketchSecret) {
-                Get-ServiceCredential -ServiceName "Timesketch" -SecretName "$ReleaseName-timesketch-secret" -SecretKey "timesketch-user" -Username "timesketch" -ServiceUrl "http://localhost:5000"
-            }
-            
-            $openrelikSecret = kubectl get secret --namespace $Namespace "$ReleaseName-openrelik-secret" 2>$null
-            if ($openrelikSecret) {
-                Get-ServiceCredential -ServiceName "OpenRelik" -SecretName "$ReleaseName-openrelik-secret" -SecretKey "openrelik-user" -Username "openrelik" -ServiceUrl "http://localhost:8711"
-            }
-
-            $yetiSecret = kubectl get secret --namespace $Namespace "$ReleaseName-yeti-secret" 2>$null
-            if ($yetiSecret) {
-                Get-ServiceCredential -ServiceName "Yeti" -SecretName "$ReleaseName-yeti-secret" -SecretKey "yeti-user" -Username "yeti" -ServiceUrl "http://localhost:9000"
-            }
-
-            if (-not ($timesketchSecret -or $openrelikSecret -or $yetiSecret)) {
-                Write-Host "ERROR: No credential secrets found for release '$ReleaseName' in namespace '$Namespace'" -ForegroundColor $Colors.Error
-            }
-        }
+    foreach ($ui in $deployed) {
+        Show-ServiceCredential -ServiceName $ui.Name -ServiceUrl $ui.Url
     }
-    
-    Write-Host "NOTE: Change default credentials in production environments!" -ForegroundColor $Colors.Warning
+
+    Write-Host "NOTE: These are static lab credentials. Do not use this deployment in production." -ForegroundColor $Colors.Warning
 }
 
 function Setup-McpServers {
@@ -878,7 +1127,7 @@ function Setup-McpServers {
     }
 
     # Define MCP servers and their secret requirements
-    # Timesketch MCP uses the existing Timesketch secret — no extra setup needed
+    # Timesketch MCP uses the existing Timesketch secret - no extra setup needed
     $mcpServers = @(
         @{
             Name        = "Timesketch MCP"
@@ -944,7 +1193,7 @@ function Setup-McpServers {
             continue
         }
 
-        # Secret doesn't exist — guide the user
+        # Secret doesn't exist - guide the user
         Write-Host "  [MISSING] Secret '$($mcp.SecretName)' not found" -ForegroundColor $Colors.Warning
         Write-Host "  $($mcp.SetupNote)" -ForegroundColor $Colors.Info
         Write-Host ""
@@ -968,7 +1217,18 @@ function Setup-McpServers {
 
     if (-not $foundAny) {
         Write-Host "No MCP servers are currently deployed." -ForegroundColor $Colors.Warning
-        Write-Host "Enable them in terraform/variables.tf and run terraform apply." -ForegroundColor $Colors.Info
+        Write-Host ""
+        Write-Host "To enable one or more MCP servers, set the matching variable(s) to true" -ForegroundColor $Colors.Info
+        Write-Host "in terraform/variables.tf, then redeploy:" -ForegroundColor $Colors.Info
+        Write-Host "  deploy_timesketch_mcp = true   (no extra secret required)" -ForegroundColor $Colors.Gray
+        Write-Host "  deploy_openrelik_mcp  = true   (API key required - Settings > API Keys)" -ForegroundColor $Colors.Gray
+        Write-Host "  deploy_yeti_mcp       = true   (API key required - Admin > API Keys)" -ForegroundColor $Colors.Gray
+        Write-Host ""
+        Write-Host "Then run:" -ForegroundColor $Colors.Info
+        Write-Host "  $ScriptCmd deploy" -ForegroundColor $Colors.Command
+        Write-Host ""
+        Write-Host "After the MCP pods are running, run '$ScriptCmd mcp-setup' again" -ForegroundColor $Colors.Info
+        Write-Host "to supply the API keys for OpenRelik / Yeti MCP." -ForegroundColor $Colors.Info
         return
     }
 
@@ -988,36 +1248,99 @@ function Setup-McpServers {
     Write-Host "TIP: Use these internal URLs when configuring MCP clients (e.g., Claude Desktop, VS Code)." -ForegroundColor $Colors.Info
 }
 
-function Show-Logs {
-    Show-Header "OSDFIR Lab Service Logs"
-    if (-not (Test-KubectlAccess)) {
-        return
-    }
-    Write-Host "Recent logs from key services:" -ForegroundColor $Colors.Info
-    Write-Host ""
-    
-    $keyServices = @("openrelik-api", "timesketch", "ollama")
-    foreach ($serviceName in $keyServices) {
-        $pods = kubectl get pods -n $Namespace --no-headers 2>$null | Where-Object { $_ -match $serviceName }
-        if ($pods) {
-            $podName = ($pods[0] -split '\s+')[0]
-            Write-Host "Recent logs for $podName" -ForegroundColor $Colors.Info
-            Write-Host "------------------------" -ForegroundColor $Colors.Gray
-            kubectl logs $podName -n $Namespace --tail=10 2>$null
+function Show-PodLogs {
+    param([string]$PodName, [string]$Ready, [string]$Status)
+
+    Write-Host "$PodName ($Status)" -ForegroundColor $Colors.Info
+    Write-Host "  ------------------------" -ForegroundColor $Colors.Gray
+
+    if ($Status -match 'Running|Completed') {
+        $logs = kubectl logs $PodName -n $Namespace --tail=10 2>&1
+        if ($logs) {
+            $logs | ForEach-Object { Write-Host "  $_" }
+        } else {
+            Write-Host "  (no log output)" -ForegroundColor $Colors.Gray
         }
-        Write-Host ""
+    } elseif ($Status -match 'Init') {
+        Write-Host "  Pod is initializing ($Ready init containers ready)" -ForegroundColor $Colors.Warning
+    } elseif ($Status -match 'Creating|Pending') {
+        Write-Host "  Pod is starting up" -ForegroundColor $Colors.Warning
+    } elseif ($Status -match 'Error|BackOff|CrashLoop|ConfigError') {
+        Write-Host "  Pod is in $Status state" -ForegroundColor $Colors.Error
+        $events = kubectl get events -n $Namespace --field-selector "involvedObject.name=$PodName" --sort-by='.lastTimestamp' 2>$null | Select-Object -Last 3
+        if ($events) { $events | ForEach-Object { Write-Host "  $_" -ForegroundColor $Colors.Gray } }
+    } else {
+        Write-Host "  Pod is in $Status state" -ForegroundColor $Colors.Warning
     }
+    Write-Host ""
 }
 
-function Show-Helm {
-    Show-Header "Helm Releases and Status"
-    if (-not (Test-KubectlAccess)) {
+function Show-Logs {
+    # Default: show logs only for pods in a problem state (CrashLoopBackOff,
+    # Error, ConfigError, ErrImagePull, etc.). With -All, also show recent log
+    # tails for every healthy pod.
+    Show-Header "OSDFIR Lab Service Logs"
+    if (-not (Test-KubectlAccess)) { return }
+
+    $allPods = @(kubectl get pods -n $Namespace --no-headers 2>$null)
+    if ($allPods.Count -eq 0) {
+        Write-Host "No pods found in namespace '$Namespace'." -ForegroundColor $Colors.Warning
         return
     }
-    helm list -n $Namespace
+
+    # Filter by -Service parameter
+    $prefix = [regex]::Escape($ReleaseName)
+    $filter = switch ($Service) {
+        "timesketch" { "^($prefix-timesketch|$prefix-opensearch)" }
+        "openrelik"  { "^$prefix-openrelik" }
+        "yeti"       { "^$prefix-yeti" }
+        default      { "." }  # all
+    }
+
+    $filtered = @($allPods | Where-Object { $_ -match $filter })
+    if ($Service -eq "all") { $filtered = $allPods }
+
+    if ($filtered.Count -eq 0) {
+        Write-Host "No pods found for service '$Service'." -ForegroundColor $Colors.Warning
+        return
+    }
+
+    # Partition into problem vs healthy
+    $errorPods   = @()
+    $runningPods = @()
+    foreach ($line in $filtered) {
+        $status = ($line -split '\s+')[2]
+        if ($status -match 'Error|BackOff|CrashLoop|ConfigError|ErrImage') {
+            $errorPods += $line
+        } else {
+            $runningPods += $line
+        }
+    }
+
+    if ($errorPods.Count -eq 0) {
+        Write-Host "No problem pods." -ForegroundColor $Colors.Success
+    } else {
+        Write-Host "PROBLEM PODS ($($errorPods.Count)):" -ForegroundColor $Colors.Error
+        Write-Host ""
+        foreach ($line in $errorPods) {
+            $fields = $line -split '\s+'
+            Show-PodLogs -PodName $fields[0] -Ready $fields[1] -Status $fields[2]
+        }
+    }
+
+    if (-not $All) {
+        Write-Host ""
+        Write-Host "$($runningPods.Count) healthy pod(s) not shown. Use '-All' to include them." -ForegroundColor $Colors.Gray
+        return
+    }
+
     Write-Host ""
-    Write-Host "Release Status:" -ForegroundColor $Colors.Success
-    helm status $ReleaseName -n $Namespace
+    Write-Host "ALL PODS ($($runningPods.Count) healthy, $($errorPods.Count) problem):" -ForegroundColor $Colors.Success
+    Write-Host ""
+    foreach ($line in $runningPods) {
+        $fields = $line -split '\s+'
+        Show-PodLogs -PodName $fields[0] -Ready $fields[1] -Status $fields[2]
+    }
 }
 
 function Show-Storage {
@@ -1046,9 +1369,19 @@ function Show-Storage {
 
 function Start-FullDeployment {
     Show-Header "Full OSDFIR Lab Deployment"
-    
+
     if (-not (Test-Prerequisites)) {
         return
+    }
+
+    # Resolve -Enable / -Disable worker toggles before anything else so bad
+    # tokens fail fast without starting Docker / Minikube.
+    if ($Enable -or $Disable) {
+        if (-not (Update-WorkerCatalog -EnableTokens $Enable -DisableTokens $Disable)) {
+            Write-Host "ERROR: One or more worker tokens could not be resolved. Aborting." -ForegroundColor $Colors.Error
+            Write-Host "Run '.\scripts\manage-openrelik-workers.ps1 list' to see valid names and numbers." -ForegroundColor $Colors.Warning
+            return
+        }
     }
 
     Update-DeploymentContext -Namespace $Namespace -ReleaseName $ReleaseName
@@ -1093,6 +1426,23 @@ function Start-FullDeployment {
     # Step 3: Deploy with Terraform
     Write-Host ""
     Write-Host "Step 3: Deploying OSDFIR Lab with Terraform..." -ForegroundColor $Colors.Info
+
+    # The terraform helm provider validates chart file paths at PLAN time, so we
+    # pull the chart tarball before invoking terraform. Idempotent: re-pulls only
+    # if the version-matching .tgz isn't already on disk.
+    if (-not (Invoke-HelmPull)) {
+        Write-Host "ERROR: Failed to pull the osdfir-infrastructure chart" -ForegroundColor $Colors.Error
+        return
+    }
+
+    # Filter the openrelik.workers list down to just the catalog-enabled set.
+    # Without this, Helm creates a Deployment for every worker in values.yaml
+    # and Minikube spends minutes spinning up pods we're about to scale to 0.
+    if (-not (Build-WorkerOverride)) {
+        Write-Host "ERROR: Failed to generate the worker override values file" -ForegroundColor $Colors.Error
+        return
+    }
+
     Push-Location "$PSScriptRoot\..\terraform"
     try {
         $helmTimeoutSec = Get-HelmTimeoutSeconds
@@ -1217,31 +1567,98 @@ function Start-FullDeployment {
     Write-Host "Step 5: Starting port forwarding..." -ForegroundColor $Colors.Info
     Start-Services
 
+    # Step 6: Configure admin/admin UI users (Timesketch + OpenRelik). Both are
+    # idempotent: re-running updates the password instead of failing.
+    Write-Host ""
+    Write-Host "Step 6: Configuring Timesketch admin user..." -ForegroundColor $Colors.Info
+    Set-TimesketchAdmin
+
+    Write-Host ""
+    Write-Host "Step 6b: Configuring OpenRelik admin user..." -ForegroundColor $Colors.Info
+    Set-OpenRelikAdmin
+
+    # Step 7: Reconcile OpenRelik workers to the catalog. Helm creates every
+    # worker Deployment with 1 replica by default; apply scales the disabled
+    # ones to 0 so the running set matches configs/openrelik-workers.yaml.
+    #
+    # There's a race: helm_release returns after submitting manifests but the
+    # API server may still be creating Deployments. Wait briefly for
+    # openrelik-api (the "ready signal" the manager script looks for) before
+    # running apply, so the reconcile doesn't silently bail.
+    Write-Host ""
+    Write-Host "Step 7: Reconciling OpenRelik workers to catalog..." -ForegroundColor $Colors.Info
+    $workerScript = Join-Path $PSScriptRoot "manage-openrelik-workers.ps1"
+    if (-not (Test-Path $workerScript)) {
+        Write-Host "WARNING: manage-openrelik-workers.ps1 not found; skipping worker reconcile." -ForegroundColor $Colors.Warning
+    } else {
+        $apiDeploy = "$ReleaseName-openrelik-api"
+        $waited = 0
+        $maxWait = 60
+        while ($waited -lt $maxWait) {
+            kubectl get deployment $apiDeploy -n $Namespace 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { break }
+            Start-Sleep -Seconds 3
+            $waited += 3
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Deployment '$apiDeploy' did not appear within ${maxWait}s." -ForegroundColor $Colors.Warning
+            Write-Host "Run '.\scripts\manage-openrelik-workers.ps1 apply' manually once pods are ready." -ForegroundColor $Colors.Gray
+        } else {
+            & $workerScript apply -Namespace $Namespace -ReleaseName $ReleaseName
+        }
+    }
+
     Write-Host ""
     Write-Host "Deployment completed!" -ForegroundColor $Colors.Success
-    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "$ScriptCmd creds" -ForegroundColor $Colors.Header
-    Write-Host " to get login credentials" -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "$ScriptCmd ollama" -ForegroundColor $Colors.Header
-    Write-Host " to check AI model status" -ForegroundColor $Colors.Info
+    Write-Host ""
+    Write-Host "Service URLs:" -ForegroundColor $Colors.Header
+    $deployedUIs = Get-DeployedUIs
+    if ($deployedUIs -and $deployedUIs.Count -gt 0) {
+        $pad = ($deployedUIs | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum + 1
+        foreach ($ui in $deployedUIs) {
+            Write-Host ("  {0,-${pad}} {1}" -f ($ui.Name + ':'), $ui.Url) -ForegroundColor $Colors.Success
+        }
+    } else {
+        Write-Host "  (none detected - check pod status)" -ForegroundColor $Colors.Warning
+    }
+    Write-Host ""
+    Write-Host "Login (static lab credentials):" -ForegroundColor $Colors.Header
+    Write-Host "  Username: admin" -ForegroundColor $Colors.Success
+    Write-Host "  Password: admin" -ForegroundColor $Colors.Success
+    Write-Host ""
+    Write-Host "Next steps:" -ForegroundColor $Colors.Header
+
+    # Build (command, description) pairs and align descriptions to a single column.
+    $steps = @(
+        @{ Cmd = "$ScriptCmd creds";                                Desc = "Show login credentials" }
+        @{ Cmd = "$ScriptCmd logs";                                 Desc = "Show service logs and problem pods" }
+        @{ Cmd = "$ScriptCmd ollama";                               Desc = "Check AI model status" }
+        @{ Cmd = ".\scripts\manage-openrelik-workers.ps1 list";     Desc = "Enable/disable OpenRelik workers" }
+    )
 
     # Check if any MCP servers are deployed and remind about setup
     $mcpServices = @("timesketch-mcp-server", "openrelik-mcp-server", "yeti-mcp-server")
     $hasMcp = $false
     foreach ($mcp in $mcpServices) {
-        $svc = kubectl get service $mcp -n $Namespace --no-headers 2>$null
+        $null = kubectl get service $mcp -n $Namespace --no-headers 2>$null
         if ($LASTEXITCODE -eq 0) { $hasMcp = $true; break }
     }
     if ($hasMcp) {
-        Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
-        Write-Host -NoNewline "$ScriptCmd mcp-setup" -ForegroundColor $Colors.Header
-        Write-Host " to configure MCP server API keys" -ForegroundColor $Colors.Info
+        $steps += @{ Cmd = "$ScriptCmd mcp-setup"; Desc = "Configure MCP server API keys" }
     }
+
+    # Pad the command column to the longest command + 2 spaces
+    $padWidth = ($steps | ForEach-Object { $_.Cmd.Length } | Measure-Object -Maximum).Maximum + 2
+    foreach ($s in $steps) {
+        Write-Host -NoNewline "  " -ForegroundColor $Colors.Info
+        Write-Host -NoNewline ($s.Cmd.PadRight($padWidth)) -ForegroundColor $Colors.Command
+        Write-Host $s.Desc -ForegroundColor $Colors.Info
+    }
+    Write-Host ""
 }
 
 function Start-SmartCleanup {
-    Show-Header 'Smart OSDFIR Lab Cleanup (Preserves AI Models & Data)'
+    Show-Header 'Clean OSDFIR Lab Shutdown (Preserves AI Models & Data)'
     
     if ($DryRun) {
         Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Warning
@@ -1343,29 +1760,15 @@ function Start-FullCleanup {
         Write-Host "Port forwarding jobs stopped." -ForegroundColor $Colors.Success
     }
     
-    # Step 2: Force-delete namespace resources, then clean Terraform state
+    # Step 2: Clear Terraform state. The previous implementation also ran
+    # `kubectl delete all --all --force --grace-period=0 ...` against the
+    # namespace, but that can hang indefinitely waiting on pod/PVC finalizers.
+    # It's also redundant: Step 3 deletes the entire Minikube cluster, which
+    # wipes every k8s resource regardless. So we just clear local state here.
     Write-Host ""
-    Write-Host "Step 2: Cleaning up Kubernetes resources..." -ForegroundColor $Colors.Info
-
-    # Force-delete all resources in the namespace so nothing blocks teardown
-    $nsExists = kubectl get namespace $Namespace --no-headers 2>$null
-    if ($nsExists) {
-        Write-Host "  Force-deleting all resources in namespace '$Namespace'..." -ForegroundColor $Colors.Info
-        kubectl delete all --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
-        kubectl delete pvc --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
-        kubectl delete secrets --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
-        kubectl delete configmaps --all -n $Namespace --force --grace-period=0 2>$null | Out-Null
-        kubectl delete namespace $Namespace --force --grace-period=0 2>$null | Out-Null
-        Write-Host "  Namespace resources force-deleted." -ForegroundColor $Colors.Success
-    }
-
-    # Remove Terraform state files so the next deploy is a fresh install.
-    # This is critical: if the state survives, Terraform will attempt a Helm
-    # "upgrade" instead of an "install", and the chart will skip user-creation
-    # postStart hooks, leaving all services without credentials.
-    Write-Host "  Removing Terraform state files..." -ForegroundColor $Colors.Info
+    Write-Host "Step 2: Clearing Terraform state..." -ForegroundColor $Colors.Info
     $tfDir = Join-Path $PSScriptRoot "..\terraform"
-    Remove-Item -Path (Join-Path $tfDir "terraform.tfstate") -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path (Join-Path $tfDir "terraform.tfstate")        -Force -ErrorAction SilentlyContinue
     Remove-Item -Path (Join-Path $tfDir "terraform.tfstate.backup") -Force -ErrorAction SilentlyContinue
     Write-Host "  Terraform state cleared." -ForegroundColor $Colors.Success
 
@@ -1381,266 +1784,6 @@ function Start-FullCleanup {
     Write-Host "Complete destruction finished!" -ForegroundColor $Colors.Error
     Write-Host "Everything has been permanently removed." -ForegroundColor $Colors.Warning
     Write-Host "Next deployment will start completely fresh (including AI model download)." -ForegroundColor $Colors.Info
-}
-
-function Restart-Deployment {
-    Show-Header "Reinstalling OSDFIR Lab Deployment"
-    
-    if (-not (Test-Prerequisites)) {
-        return
-    }
-    
-    if (-not (Test-MinikubeRunning)) {
-        Write-Host "ERROR: Minikube cluster is not running" -ForegroundColor $Colors.Error
-        Write-Host "TIP: Run $ScriptCmd deploy to start the full environment" -ForegroundColor $Colors.Info
-        return
-    }
-
-    Update-DeploymentContext -Namespace $Namespace -ReleaseName $ReleaseName
-    
-    if ($DryRun) {
-        Write-Host "DRY RUN: Would execute the following steps:" -ForegroundColor $Colors.Warning
-        Write-Host "1. Stop all port forwarding jobs" -ForegroundColor $Colors.Info
-        Write-Host "2. Preserve database passwords" -ForegroundColor $Colors.Info
-        Write-Host "3. Uninstall existing Helm release" -ForegroundColor $Colors.Info
-        Write-Host "4. Wait for cleanup to complete" -ForegroundColor $Colors.Info
-        Write-Host "5. Apply Terraform configuration with preserved passwords" -ForegroundColor $Colors.Info
-        Write-Host "6. Wait for pods to be ready" -ForegroundColor $Colors.Info
-        Write-Host "7. Start port forwarding" -ForegroundColor $Colors.Info
-        return
-    }
-    
-    if (-not $Force) {
-        $confirmation = Read-Host "This will uninstall and reinstall the '$ReleaseName' Helm release in namespace '$Namespace'. Continue? (yes/no)"
-        if ($confirmation -ne "yes") {
-            Write-Host "Reinstall cancelled." -ForegroundColor $Colors.Warning
-            return
-        }
-    }
-    
-    # Step 1: Stop port forwarding jobs
-    Write-Host "Step 1: Stopping port forwarding jobs..." -ForegroundColor $Colors.Info
-    $pfJobs = Get-Job | Where-Object { $_.Name -like "pf-*" }
-    if ($pfJobs) {
-        $pfJobs | Stop-Job
-        $pfJobs | Remove-Job -Force
-        Write-Host "Port forwarding jobs stopped." -ForegroundColor $Colors.Success
-    }
-    
-    # Step 2: Preserve database passwords
-    Write-Host ""
-    Write-Host "Step 2: Preserving database passwords..." -ForegroundColor $Colors.Info
-    $preservedPasswords = @{}
-    
-    # Try to get existing passwords from secrets
-    try {
-        $timesketchPwd = kubectl get secret osdfir-lab-timesketch-secret -n $Namespace -o jsonpath="{.data.postgres-user}" 2>$null
-        if ($timesketchPwd -and $timesketchPwd.Length -gt 0) {
-            $preservedPasswords['timesketch'] = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($timesketchPwd))
-            Write-Host "  [OK] Preserved Timesketch database password" -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "  [SKIP] Could not preserve Timesketch password (will generate new)" -ForegroundColor $Colors.Warning
-        }
-    } catch {
-        Write-Host "  [SKIP] Could not preserve Timesketch password (will generate new)" -ForegroundColor $Colors.Warning
-    }
-    
-    try {
-        $openrelikPwd = kubectl get secret osdfir-lab-openrelik-secret -n $Namespace -o jsonpath="{.data.postgres-user}" 2>$null
-        if ($openrelikPwd -and $openrelikPwd.Length -gt 0) {
-            $preservedPasswords['openrelik'] = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($openrelikPwd))
-            Write-Host "  [OK] Preserved OpenRelik database password" -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "  [SKIP] Could not preserve OpenRelik password (will generate new)" -ForegroundColor $Colors.Warning
-        }
-    } catch {
-        Write-Host "  [SKIP] Could not preserve OpenRelik password (will generate new)" -ForegroundColor $Colors.Warning
-    }
-    
-    # Step 3: Uninstall existing Helm release
-    Write-Host ""
-    Write-Host "Step 3: Uninstalling existing Helm release..." -ForegroundColor $Colors.Info
-    
-    # Check if release exists
-    $releaseExists = $false
-    try {
-        $release = helm list -n $Namespace -o json | ConvertFrom-Json | Where-Object { $_.name -eq $ReleaseName }
-        if ($release) {
-            $releaseExists = $true
-            Write-Host "Found existing release '$ReleaseName' with status: $($release.status)" -ForegroundColor $Colors.Info
-        }
-    } catch {
-        Write-Host "Unable to check existing releases, proceeding with reinstall..." -ForegroundColor $Colors.Warning
-    }
-    
-    if ($releaseExists) {
-        Write-Host "Uninstalling release '$ReleaseName'..." -ForegroundColor $Colors.Warning
-        helm uninstall $ReleaseName -n $Namespace
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release uninstalled successfully." -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "WARNING: Uninstall may have had issues, proceeding anyway..." -ForegroundColor $Colors.Warning
-        }
-        
-        # Step 4: Wait for cleanup
-        Write-Host ""
-        Write-Host "Step 4: Waiting for resources to be cleaned up..." -ForegroundColor $Colors.Info
-        $cleanupTimeout = 120
-        $elapsed = 0
-        do {
-            Start-Sleep -Seconds 5
-            $elapsed += 5
-            $pods = kubectl get pods -n $Namespace --no-headers 2>$null
-            $remainingPods = ($pods | Where-Object { $_ -match $ReleaseName }).Count
-            Write-Host "  Remaining pods: $remainingPods ($elapsed s elapsed)" -ForegroundColor $Colors.Info
-        } while ($remainingPods -gt 0 -and $elapsed -lt $cleanupTimeout)
-        
-        if ($remainingPods -gt 0) {
-            Write-Host "WARNING: Some pods may still be terminating, proceeding anyway..." -ForegroundColor $Colors.Warning
-        } else {
-            Write-Host "Cleanup completed." -ForegroundColor $Colors.Success
-        }
-    } else {
-        Write-Host "No existing release found, proceeding with fresh install..." -ForegroundColor $Colors.Info
-    }
-    
-    # Step 5: Create temporary values file with preserved passwords
-    Write-Host ""
-    Write-Host "Step 5: Creating temporary values file with preserved passwords..." -ForegroundColor $Colors.Info
-    $tempValuesFile = "$PSScriptRoot\..\terraform\temp-preserved-passwords.yaml"
-    $tempValuesContent = @"
-# Temporary values file for preserved passwords during reinstall
-"@
-    
-    if ($preservedPasswords.ContainsKey('timesketch')) {
-        $tempValuesContent += @"
-
-timesketch:
-  postgres:
-    password: "$($preservedPasswords['timesketch'])"
-"@
-        Write-Host "  Added preserved Timesketch password to values" -ForegroundColor $Colors.Success
-    }
-    
-    if ($preservedPasswords.ContainsKey('openrelik')) {
-        $tempValuesContent += @"
-
-openrelik:
-  postgres:
-    password: "$($preservedPasswords['openrelik'])"
-"@
-        Write-Host "  Added preserved OpenRelik password to values" -ForegroundColor $Colors.Success
-    }
-    
-    # Write temporary values file
-    $tempValuesContent | Out-File -FilePath $tempValuesFile -Encoding UTF8
-    
-    # Step 6: Reinstall with Terraform using preserved passwords
-    Write-Host ""
-    Write-Host "Step 6: Reinstalling OSDFIR Lab with Terraform and preserved passwords..." -ForegroundColor $Colors.Info
-    Push-Location "$PSScriptRoot\..\terraform"
-    try {
-        # Modify the Terraform main.tf to include the temp values file
-        $originalMainContent = Get-Content "main.tf" -Raw
-        $modifiedMainContent = $originalMainContent -replace 'values\s*=\s*\[\s*([^\]]+)\s*\]', 'values = [$1, file("temp-preserved-passwords.yaml")]'
-        $modifiedMainContent | Out-File -FilePath "main.tf" -Encoding UTF8
-        
-        # Run terraform apply to reinstall
-        $helmTimeoutSec = Get-HelmTimeoutSeconds
-        terraform apply -auto-approve -var "helm_timeout=$helmTimeoutSec"
-        $terraformResult = $LASTEXITCODE
-        
-        # Restore original main.tf
-        $originalMainContent | Out-File -FilePath "main.tf" -Encoding UTF8
-        
-        if ($terraformResult -ne 0) {
-            Write-Host "ERROR: Terraform apply failed during reinstall" -ForegroundColor $Colors.Error
-            return
-        }
-    } finally {
-        Pop-Location
-        # Clean up temporary values file
-        Remove-Item $tempValuesFile -ErrorAction SilentlyContinue
-    }
-    
-    # Step 7: Wait for pods to be ready
-    Write-Host ""
-    Write-Host "Step 7: Waiting for pods to be ready..." -ForegroundColor $Colors.Info
-    $timeout = Get-HelmTimeoutSeconds
-    $elapsed = 0
-    do {
-        Start-Sleep -Seconds 20
-        $elapsed += 20
-        if ($elapsed -gt 0 -and ($elapsed % 120 -eq 0)) {
-            Write-Host "Tip: Run 'kubectl get deploy -n $Namespace' in another terminal to monitor rollout progress." -ForegroundColor $Colors.Info
-        }
-        $pods = kubectl get pods -n $Namespace --no-headers 2>$null
-        $runningPods = ($pods | Where-Object { $_ -match "Running" -and $_ -match "1/1" }).Count
-        $runningPods += ($pods | Where-Object { $_ -match "Running" -and $_ -match "2/2" }).Count
-        $runningPods += ($pods | Where-Object { $_ -match "Running" -and $_ -match "3/3" }).Count
-        $totalPods = ($pods | Measure-Object).Count
-        Write-Host "  Pods ready: $runningPods/$totalPods ($elapsed seconds elapsed)" -ForegroundColor $Colors.Info
-        
-        # Check if Ollama is downloading model
-        $ollamaPod = kubectl get pods -n $Namespace -l app=ollama --no-headers 2>$null
-        if ($ollamaPod -and $ollamaPod -match "Init") {
-            $podName = ($ollamaPod -split '\s+')[0]
-            try {
-                $initLogs = kubectl logs $podName -c model-puller -n $Namespace --tail=3 2>$null
-                if ($initLogs -and $initLogs -match "Pulling model|pulling manifest|downloading") {
-                    $lastLine = ($initLogs -split "`n")[-1].Trim()
-                    if ($lastLine) {
-                        # Clean up Unicode box-drawing characters and other display artifacts
-                        $cleanedLine = $lastLine -replace '[^\x20-\x7E]', '' -replace '\s+', ' '
-                        # Extract meaningful information from progress lines
-                        if ($cleanedLine -match "pulling (\w+):\s+(\d+%)\s+(.+)") {
-                            Write-Host "  Ollama: Downloading model layer - $($matches[2]) complete" -ForegroundColor $Colors.Warning
-                        } elseif ($cleanedLine -match "pulling manifest") {
-                            Write-Host "  Ollama: Downloading model manifest..." -ForegroundColor $Colors.Warning
-                        } elseif ($cleanedLine -match "downloading") {
-                            Write-Host "  Ollama: Downloading AI model..." -ForegroundColor $Colors.Warning
-                        } else {
-                            Write-Host "  Ollama: Downloading AI model... This may take several minutes." -ForegroundColor $Colors.Warning
-                        }
-                    } else {
-                        Write-Host "  Ollama is downloading AI model... This may take several minutes." -ForegroundColor $Colors.Warning
-                    }
-                } elseif ($initLogs -and $initLogs -match "already exists, skipping download") {
-                    Write-Host "  Ollama: Model already cached, initializing..." -ForegroundColor $Colors.Success
-                } else {
-                    Write-Host "  Ollama is initializing AI model..." -ForegroundColor $Colors.Warning
-                }
-            } catch {
-                Write-Host "  Ollama is downloading AI model... This may take several minutes." -ForegroundColor $Colors.Warning
-            }
-        }
-    } while ($runningPods -lt $totalPods -and $elapsed -lt $timeout)
-    
-    if ($runningPods -lt $totalPods) {
-        Write-Host "WARNING: Not all pods are ready after $timeout seconds" -ForegroundColor $Colors.Warning
-        Write-Host "You can check status with: $ScriptCmd status" -ForegroundColor $Colors.Info
-    } else {
-        Write-Host "All pods are ready!" -ForegroundColor $Colors.Success
-    }
-    
-    # Step 8: Start services
-    Write-Host ""
-    Write-Host "Step 8: Starting port forwarding..." -ForegroundColor $Colors.Info
-    Start-Services
-    
-    Write-Host ""
-    Write-Host "Reinstall completed!" -ForegroundColor $Colors.Success
-    if ($preservedPasswords.Count -gt 0) {
-        Write-Host "Database passwords were preserved - services should continue working with existing data." -ForegroundColor $Colors.Success
-    } else {
-        Write-Host "New database passwords were generated - existing data may be inaccessible." -ForegroundColor $Colors.Warning
-    }
-    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "$ScriptCmd creds" -ForegroundColor $Colors.Header
-    Write-Host " to get login credentials" -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "Use " -ForegroundColor $Colors.Info
-    Write-Host -NoNewline "$ScriptCmd ollama" -ForegroundColor $Colors.Header
-    Write-Host " to check AI model status" -ForegroundColor $Colors.Info
 }
 
 #function New-MCPServerImage {
@@ -1730,26 +1873,6 @@ switch ($Action.ToLower()) {
             }
         }
     }
-    "cleanup" { 
-        Write-Host "OSDFIR Lab Cleanup - Use with caution!" -ForegroundColor $Colors.Error
-        if (-not $Force) {
-            $confirmation = Read-Host "Are you sure you want to cleanup OSDFIR Lab resources? (yes/no)"
-            if ($confirmation -ne "yes") {
-                Write-Host "Cleanup cancelled." -ForegroundColor $Colors.Warning
-                return
-            }
-        }
-        Write-Host "Cleaning up OSDFIR Lab jobs..." -ForegroundColor $Colors.Warning
-        $allJobs = Get-Job | Where-Object { $_.Name -like "pf-*" -or $_.Name -eq "minikube-tunnel" }
-        if ($allJobs) {
-            $allJobs | Stop-Job
-            $allJobs | Remove-Job -Force
-            Write-Host "OSDFIR Lab jobs cleaned up." -ForegroundColor $Colors.Success
-        } else {
-            Write-Host "No OSDFIR Lab jobs found to clean up." -ForegroundColor $Colors.Info
-        }
-    }
-    "helm" { Show-Helm }
     "uninstall" {
         if (-not $Force) {
             $confirmation = Read-Host "Are you sure you want to uninstall the Helm release '$ReleaseName'? (yes/no)"
@@ -1761,98 +1884,24 @@ switch ($Action.ToLower()) {
         Show-Header "Uninstalling OSDFIR Lab Helm Release"
         helm uninstall $ReleaseName -n $Namespace
     }
-    "reinstall" { Restart-Deployment }
     "storage" { Show-Storage }
     "minikube" { Show-MinikubeStatus }
-    "docker" { 
+    "docker" {
         Show-Header "Docker Desktop Management"
         if (Test-Docker) {
-            # Show some Docker info
             Write-Host ""
-            Write-Host "Docker Info:" -ForegroundColor $Colors.Info
-            docker version --format "Client: {{.Client.Version}}"
-            docker version --format "Server: {{.Server.Version}}"
+            Write-Host "Docker is running. Versions:" -ForegroundColor $Colors.Info
+            docker version --format "  Client: {{.Client.Version}}"
+            docker version --format "  Server: {{.Server.Version}}"
         } else {
+            Write-Host "Docker is not running. Attempting to start Docker Desktop..." -ForegroundColor $Colors.Warning
             Start-DockerDesktop
         }
     }
     "deploy" { Start-FullDeployment }
     "shutdown-lab" { Start-SmartCleanup }
-    "shutdown-lab-all" { Start-FullCleanup }
+    "destroy-lab" { Start-FullCleanup }
     "mcp-setup" { Setup-McpServers }
     "ollama" { Show-OllamaStatus }
-    "ollama-test" {
-        Show-Header "Ollama AI Prompt Testing"
-        
-        if (-not (Test-KubectlAccess)) {
-            return
-        }
-        
-        $ollamaPod = kubectl get pods -n $Namespace -l app=ollama --no-headers 2>$null
-        if (-not $ollamaPod) {
-            Write-Host "ERROR: Ollama pod not found" -ForegroundColor $Colors.Error
-            return
-        }
-        
-        $name = ($ollamaPod -split '\s+')[0]
-        
-        # Get available models
-        $modelOutput = kubectl exec -n $Namespace $name -- ollama list 2>$null
-        $availableModels = @()
-        if ($modelOutput) {
-            $lines = $modelOutput -split "`n"
-            $modelLines = $lines | Where-Object { $_ -match "^\w+.*\d+\s+(GB|MB|KB)" }
-            foreach ($line in $modelLines) {
-                $parts = $line -split '\s+'
-                $availableModels += $parts[0]
-            }
-        }
-        
-        if ($availableModels.Count -eq 0) {
-            Write-Host "ERROR: No models available for testing" -ForegroundColor $Colors.Error
-            return
-        }
-        
-        $testModel = $availableModels[0]
-        Write-Host "Testing model: $testModel" -ForegroundColor $Colors.Info
-        Write-Host "This may take a few moments for each prompt..." -ForegroundColor $Colors.Warning
-        
-        # Test prompts with numbering and humorous forensics questions
-        $testPrompts = @(
-            @{Number=1; Prompt="Tell me a one-liner pun about digital forensics."},
-            @{Number=2; Prompt="Write a single haiku about finding deleted files."}
-        )
-        
-        $totalPrompts = $testPrompts.Count
-        foreach ($promptObj in $testPrompts) {
-            Write-Host ""
-            Write-Host "Test $($promptObj.Number) of ${totalPrompts}: $($promptObj.Prompt)" -ForegroundColor $Colors.Header
-            Write-Host "Response:" -ForegroundColor $Colors.Success
-            
-            try {
-                $escapedPrompt = $promptObj.Prompt -replace "'", "'\''"
-                $promptResult = kubectl exec -n $Namespace $name -- sh -c "echo '$escapedPrompt' | ollama run $testModel 2>/dev/null" 2>$null
-                # Strip ANSI escape codes in PowerShell
-                $cleaned = $promptResult -replace "\x1b\[[0-9;?]*[a-zA-Z]","" -replace "\x1b\[[0-9;?]*[hlK]","" -replace "`r","" | Where-Object { $_.Trim() -ne "" }
-                $responseText = ($cleaned -join "`n").Trim()
-
-                if ($responseText -and $responseText.Length -gt 0) {
-                    Write-Host "  [OK] Response:" -ForegroundColor $Colors.Success
-                    foreach ($line in $responseText -split "`n") {
-                        Write-Host "    $line" -ForegroundColor $Colors.Gray
-                    }
-                } else {
-                    Write-Host "  [ERROR] AI model not responding properly" -ForegroundColor $Colors.Error
-                }
-            } catch {
-                Write-Host "Error: $($_.Exception.Message)" -ForegroundColor $Colors.Error
-            }
-            
-            Write-Host ""
-        }
-        
-        Write-Host "AI Prompt Testing Complete!" -ForegroundColor $Colors.Success
-        Write-Host "TIP: Use these prompts as examples for integrating AI into your forensic workflows." -ForegroundColor $Colors.Info
-    }
     default { Show-Help }
 }

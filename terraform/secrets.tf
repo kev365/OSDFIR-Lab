@@ -1,34 +1,25 @@
-# Pre-seed secrets for sub-charts that use Helm's lookup() function.
+# Pre-seed secrets for the osdfir-infrastructure sub-charts.
 #
-# When a sub-chart (Yeti, HashR) is enabled for the first time on an existing
-# Helm release, the chart's secret.yaml treats it as an "upgrade" and tries to
-# look up an existing secret. If that secret doesn't exist yet the lookup
-# returns nil and the template fails. Creating the secrets here, before the
-# Helm release runs, ensures the lookup always succeeds.
+# Purpose:
+#   1. Ensure Helm's lookup() succeeds on first enable of a sub-chart (otherwise
+#      the chart's secret.yaml errors with nil on the lookup).
+#   2. Force static "admin" credentials across the board so the lab is
+#      repeatable across tear-down/redeploy cycles. This is a personal test
+#      lab (see README disclaimer) — not for production use. Postgres/Redis/
+#      ArangoDB are ClusterIP-only (no external exposure), so static creds
+#      there carry no meaningful risk in this context.
 #
-# Terraform's lifecycle ignore_changes prevents these from being overwritten
-# once the Helm chart takes ownership of the secret values.
+# Timesketch is intentionally NOT pre-seeded here. Its admin user is created
+# post-deploy via `tsctl add_user` from scripts/manage-osdfir-lab.ps1 — that
+# is more reliable than relying on the chart's lookup() behavior.
+#
+# Convention used by the osdfir-infrastructure charts:
+#   <tool>-user   = admin USERNAME
+#   <tool>-secret = admin PASSWORD
+#   postgres-user, redis-user, <tool>-arangodb = backend service passwords
 
-# ---------- random credentials ----------
-
-resource "random_password" "yeti_user" {
-  length  = 32
-  special = false
-}
-
-resource "random_password" "yeti_arangodb" {
-  length  = 16
-  special = false
-}
-
-resource "random_password" "yeti_secret" {
-  length  = 32
-  special = false
-}
-
-resource "random_password" "hashr_postgres" {
-  length  = 16
-  special = false
+locals {
+  admin_password = "admin"
 }
 
 # ---------- Yeti secret ----------
@@ -49,13 +40,13 @@ resource "kubernetes_secret" "yeti_seed" {
   }
 
   data = {
-    "yeti-user"     = random_password.yeti_user.result
-    "yeti-arangodb" = random_password.yeti_arangodb.result
-    "yeti-secret"   = random_password.yeti_secret.result
+    "yeti-user"     = local.admin_password
+    "yeti-secret"   = local.admin_password
+    "yeti-arangodb" = local.admin_password
   }
 
   lifecycle {
-    ignore_changes = [data, metadata[0].labels, metadata[0].annotations]
+    ignore_changes = [metadata[0].labels, metadata[0].annotations]
   }
 
   depends_on = [kubernetes_namespace.osdfir]
@@ -79,12 +70,18 @@ resource "kubernetes_secret" "hashr_postgres_seed" {
   }
 
   data = {
-    "postgres-user" = random_password.hashr_postgres.result
+    "postgres-user" = local.admin_password
   }
 
   lifecycle {
-    ignore_changes = [data, metadata[0].labels, metadata[0].annotations]
+    ignore_changes = [metadata[0].labels, metadata[0].annotations]
   }
 
   depends_on = [kubernetes_namespace.osdfir]
 }
+
+# OpenRelik's secret is no longer pre-seeded here. The chart generates its own
+# backend credentials on install. The admin/admin UI login is created after
+# pods are ready by Set-OpenRelikAdmin in scripts/manage-osdfir-lab.ps1 using
+# `python admin.py create-user admin --password admin --admin`, mirroring the
+# tsctl-based approach used for Timesketch.
