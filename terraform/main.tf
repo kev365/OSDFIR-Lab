@@ -56,25 +56,34 @@ resource "kubernetes_persistent_volume_claim" "osdfirvolume" {
   }
 }
 
-resource "null_resource" "helm_repo" {
-  provisioner "local-exec" { command = "helm repo add osdfir-charts https://google.github.io/osdfir-infrastructure/" }
-  provisioner "local-exec" { command = "helm repo update" }
+# The chart tarball is pre-pulled by scripts/manage-osdfir-lab.ps1 (Invoke-HelmPull)
+# before terraform runs. It lives outside terraform because the helm provider
+# validates chart paths at PLAN time, which depends_on can't satisfy.
+locals {
+  osdfir_chart_tgz = abspath("${path.module}/chart-cache/osdfir-infrastructure-${var.osdfir_chart_version}.tgz")
 }
 
-# First deploy the main OSDFIR infrastructure
+# First deploy the main OSDFIR infrastructure.
 resource "helm_release" "osdfir" {
   name      = var.helm_release_name
-  chart     = "osdfir-charts/osdfir-infrastructure"
-  version   = var.osdfir_chart_version
+  chart     = local.osdfir_chart_tgz
   namespace = kubernetes_namespace.osdfir.metadata[0].name
   timeout   = var.helm_timeout
-  
-  # Add this line to use your values file
-  values = [file("${path.module}/../configs/osdfir-lab-values.yaml")]
-  
+  wait      = false  # Don't block on pod readiness; use manage-osdfir-lab.ps1 status to verify
+
+  # Helm merges values files left-to-right; the generated override must come
+  # after the base file so its (filtered) openrelik.workers array REPLACES the
+  # full list in the base file. The override file is produced before terraform
+  # runs by manage-osdfir-lab.ps1 (Build-WorkerOverride).
+  values = [
+    file("${path.module}/../configs/osdfir-lab-values.yaml"),
+    file("${path.module}/../configs/osdfir-lab-workers.generated.yaml"),
+  ]
+
   depends_on = [
-    null_resource.helm_repo,
     kubernetes_namespace.osdfir,
-    kubernetes_config_map.timesketch_configs
+    kubernetes_config_map.timesketch_configs,
+    kubernetes_secret.yeti_seed,
+    kubernetes_secret.hashr_postgres_seed
   ]
 }

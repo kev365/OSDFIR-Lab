@@ -5,16 +5,16 @@
 # and uses these values for model configuration
 ai:
   model:
-    name: "smollm:latest"
+    name: "qwen2.5:0.5b"
     provider: "ollama"
     server_url: "http://ollama.osdfir.svc.cluster.local:11434"
     timeouts:
       llm_request: 120        # Main LLM request timeout (seconds)
-      api_timeout: 120       # Timesketch API timeout (seconds) 
+      api_timeout: 120       # Timesketch API timeout (seconds)
       http_connect: 20       # HTTP connection timeout
       http_read: 120          # HTTP read timeout (should match llm_request)
       warm_up: 120            # Model warm-up timeout
-    max_input_tokens: 8192
+    max_input_tokens: 32768
     # max_output_tokens: 1024
     # temperature: 0.1
     # Forensic-specific system prompt
@@ -32,16 +32,19 @@ global:
   timesketch:
     enabled: true
   openrelik:
-    enabled: true 
+    enabled: true
   yeti:
-    enabled: false  # Not currently set up in the lab
+    enabled: false
   hashr:
-    enabled: false  # Not currently set up in the lab
+    enabled: false
   grr:
     enabled: false  # Not currently used in the lab
 
-  # Timesketch MCP Server deployment, enabled/disable here: terraform\variables.tf
-  # Ollama deployment, enabled/disable here: terraform\variables.tf
+  # The following are managed via terraform/variables.tf:
+  #   Ollama deployment (deploy_ollama)
+  #   Timesketch MCP Server (deploy_timesketch_mcp)
+  #   OpenRelik MCP Server (deploy_openrelik_mcp)
+  #   Yeti MCP Server (deploy_yeti_mcp)
 
 # Global Security Settings
 securityContext:
@@ -59,95 +62,40 @@ networkPolicy:
   enabled: true
 
 # Timesketch Configuration
+# Image tags for timesketch, nginx, opensearch (+ dashboard), redis, and
+# postgres all come from the upstream osdfir-infrastructure chart. We only
+# override lab-specific config here (custom tarball, user creation, no OIDC)
+# so a chart bump carries everything else along automatically.
+#
+# OpenSearch Dashboards: chart default enables it but gates deployment on
+# `opensearch.selfSigned: true`. To actually run the dashboard, override both
+# `opensearch.selfSigned: true` and `opensearch.dashboard.ingress: true` here
+# and redeploy. selfSigned enables the OpenSearch Security Plugin + self-signed
+# TLS, which changes how Timesketch connects to OpenSearch - test after enabling.
 timesketch:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
-    pullPolicy: IfNotPresent
-    tag: "20251114"
   config:
     override: true
     existingConfigMap: osdfir-lab-ts-configs
     createUser: true
     oidc:
       enabled: false
-  frontend:
-    resources:
-      limits: {}
-      requests: {}
-  worker:
-    resources:
-      limits: {}
-      requests: {}
-  nginx:
-    image:
-      repository: nginx
-      tag: "1.25.5-alpine-slim"
   securityContext:
     enabled: true
-  opensearch:
-    image:
-      repository: opensearchproject/opensearch
-      tag: "3.1.0"
-    replicas: 1
-    sysctlInit:
-      enabled: true
-    opensearchJavaOpts: "-Xmx512M -Xms512M"
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.5-alpine"
 
 # OpenRelik Configuration
+# Image tags for frontend/api/mediator/metrics/redis/postgres/prometheus all
+# come from the upstream chart. We only set the LLM analyzer config and keep
+# our worker catalog below.
 openrelik:
-  frontend:
-    image:
-      repository: ghcr.io/openrelik/openrelik-ui
-      pullPolicy: IfNotPresent
-      tag: "0.6.0"
-  api:
-    image:
-      repository: ghcr.io/openrelik/openrelik-server
-      pullPolicy: IfNotPresent
-      tag: "0.6.0"
-    resources:
-      limits: {}
-      requests: {}
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8710"]
-    env:
-      REDIS_URL: "redis://openrelik-redis:6379"
-  mediator:
-    image:
-      repository: ghcr.io/openrelik/openrelik-mediator
-      pullPolicy: IfNotPresent
-      tag: "0.6.0"
-  metrics:
-    image:
-      repository: ghcr.io/openrelik/openrelik-metrics
-      pullPolicy: IfNotPresent
-      tag: "0.6.0"
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.5-alpine"
-  prometheus:
-    image:
-      repository: prom/prometheus
-      tag: "v3.0.1"
-
-  # LLM analyzer configuration (using OpenRelik chart's built-in configmap)
   config:
+    # LLM analyzer configuration (using OpenRelik chart's built-in configmap).
+    # The admin/admin UI login is created post-deploy via openrelik-server's
+    # admin.py (Set-OpenRelikAdmin in scripts/manage-osdfir-lab.ps1); the chart
+    # is allowed to generate its own backend secret as usual.
     analyzers:
       llm:
         provider: "ollama"
-        model: "smollm:latest"
+        model: "gemma3:270m"
         #max_input_tokens: !!int 4096
         # max_output_tokens: !!int 2048
         # temperature: !!float 0.1
@@ -155,47 +103,168 @@ openrelik:
         system_prompt: "You are a digital forensics expert assistant."
 
   # OpenRelik Workers
+  # =================
+  # Each entry carries its own `enabled` flag alongside the deployment spec, so
+  # there is ONE place to toggle a worker: flip enabled:true/false and redeploy.
+  # scripts/manage-openrelik-workers.ps1 edits this file in-place and also scales
+  # existing Deployments for temporary start/stop without a redeploy.
+  #
+  # At deploy time, scripts/manage-osdfir-lab.ps1 runs Build-WorkerOverride which
+  # writes a filtered copy (only entries with enabled:true AND a non-empty image)
+  # to configs/osdfir-lab-workers.generated.yaml. Helm then creates Deployments
+  # only for workers that are actually enabled AND deployable.
+  #
+  # Fields (beyond what Helm reads):
+  #   enabled      true = deploy + run | false = skip entirely
+  #   description  Shown by manage-openrelik-workers.ps1 list
+  #   source       "official"  - ghcr.io/openrelik/...
+  #                "community" - 3rd-party publisher (see description for credit)
+  #                "no-image"  - build-from-source; excluded from helm override
+  #
+  # Entries are grouped by source (official first, then community with images,
+  # then no-image) and sorted alphabetically within each group.
   workers:
+
+    # === Official Workers (ghcr.io/openrelik/) ===
+
     - name: openrelik-worker-analyzer-config
-      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:0.2.0
+      enabled: false
+      description: "Identifies security issues and misconfigurations in config files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:latest
       command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-analyzer-config"
       env: {}
       resources: {}
 
-    - name: openrelik-worker-plaso
-      image: ghcr.io/openrelik/openrelik-worker-plaso:0.4.0
-      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
+    - name: openrelik-worker-analyzer-logs
+      enabled: false
+      description: "Identifies potential security issues in application log files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-analyzer-logs:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-analyzer-logs"
       env: {}
       resources: {}
 
-      ## When deployed via the OSDFIR Infrastructure chart, the Timesketch Worker   
-      ## automatically receives its required environment variables through Helm.
-    - name: openrelik-worker-timesketch
-      image: ghcr.io/openrelik/openrelik-worker-timesketch:0.3.0
-      command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
+    - name: openrelik-worker-bulkextractor
+      enabled: false
+      description: "Extracts structured data (emails, credit cards, JPEGs) without filesystem parsing"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-bulkextractor:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-bulkextractor"
       env: {}
       resources: {}
 
-    - name: openrelik-worker-hayabusa
-      image: ghcr.io/openrelik/openrelik-worker-hayabusa:0.3.0
-      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-hayabusa"
+    - name: openrelik-worker-capa
+      enabled: false
+      description: "Detects capabilities within executable files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-capa:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-capa"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-chromecreds
+      enabled: false
+      description: "Analyzes stored Chrome credentials"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-chromecreds:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-chromecreds"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-cloud-logs
+      enabled: false
+      description: "Analyzes cloud service log files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-cloud-logs:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-cloud-logs"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-containers
+      enabled: false
+      description: "Extracts/inspects container images and layers"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-containers:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-containers"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-dfindexeddb
+      enabled: false
+      description: "Digital forensic analysis of IndexedDB and LevelDB files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-dfindexeddb:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-dfindexeddb"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-duckdb
+      enabled: false
+      description: "Runs DuckDB SQL queries against tabular artifacts"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-duckdb:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-duckdb"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-entropy
+      enabled: false
+      description: "Computes byte entropy and flags files exceeding thresholds"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-entropy:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-entropy"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-exif
+      enabled: false
+      description: "Extracts EXIF metadata from image files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-exif:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-exif"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-extraction
+      enabled: false
+      description: "Extracts files from disk images and archives"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-extraction:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-floss
+      enabled: false
+      description: "Extracts and deobfuscates strings from malware binaries (FLARE FLOSS)"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-floss:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-floss"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-grep
+      enabled: true
+      description: "Pattern-based file searching"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-grep:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-grep"
       env: {}
       resources: {}
 
     # LLM worker - environment variables automatically set by OpenRelik chart from config.analyzers.llm
-    # Additional env vars added to ensure chunker gets proper integer values
     - name: openrelik-worker-llm
+      enabled: false
+      description: "Processes UTF-8 readable files with LLM prompts (requires Ollama)"
+      source: official
       image: ghcr.io/openrelik/openrelik-worker-llm:latest
       command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=DEBUG -Q openrelik-worker-llm"
       env:
-        #- name: LLM_MAX_OUTPUT_TOKENS
-        #  value: "2048"
-        #- name: LLM_TEMPERATURE
-        #  value: "0.1"
         - name: LLM_PROVIDER
           value: "ollama"
         - name: LLM_MODEL_NAME
-          value: "smollm:latest"
+          value: "gemma3:270m"
       resources:
         requests:
           memory: 2Gi
@@ -204,125 +273,315 @@ openrelik:
           memory: 4Gi
           cpu: 2
 
-    - name: openrelik-worker-extraction
-      image: ghcr.io/openrelik/openrelik-worker-extraction:0.5.0
-      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
+    - name: openrelik-worker-os-creds
+      enabled: false
+      description: "Extracts and analyzes OS credentials"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-os-creds:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-os-creds"
       env: {}
       resources: {}
 
-#    - name: openrelik-worker-strings
-#      image: ghcr.io/openrelik/openrelik-worker-strings:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-photorec
+      enabled: false
+      description: "File carving with PhotoRec"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-photorec:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-photorec"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-analyzer-logs
-#      image: ghcr.io/openrelik/openrelik-worker-analyzer-logs:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-analyzer-logs"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-plaso
+      enabled: false
+      description: "Creates super timelines from disk images"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-plaso:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-bulkextractor
-#      image: ghcr.io/openrelik/openrelik-worker-bulkextractor:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-bulkextractor"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-strings
+      enabled: true
+      description: "Extracts strings from files"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-strings:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-strings"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-capa
-#      image: ghcr.io/openrelik/openrelik-worker-capa:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-capa"
-#      env: {}
-#      resources: {}
+    # Timesketch worker automatically receives required env vars through Helm
+    - name: openrelik-worker-timesketch
+      enabled: false
+      description: "Exports Plaso and CSV/JSON data to Timesketch"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-timesketch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-chromecreds
-#      image: ghcr.io/openrelik/openrelik-worker-chromecreds:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-chromecreds"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-yara
+      enabled: false
+      description: "Scans files using YARA rules for malware/IOC detection"
+      source: official
+      image: ghcr.io/openrelik/openrelik-worker-yara:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-yara"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-cloud-logs
-#      image: ghcr.io/openrelik/openrelik-worker-cloud-logs:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-cloud-logs"
-#      env: {}
-#      resources: {}
+    # === Community Workers (3rd-party published images) ===
+    # Note on name normalization: some authors collapse hyphens in their image
+    # and queue names (e.g. `ezexecution` instead of `eztools-execution`). We
+    # match the published image name in `name:` so the Deployment, the image,
+    # and the celery queue `-Q ...` all line up.
 
-#    - name: openrelik-worker-dfindexeddb
-#      image: ghcr.io/openrelik/openrelik-worker-dfindexeddb:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-dfindexeddb"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-amcache-evilhunter
+      enabled: false
+      description: "Parses Windows Amcache.hve via AmCache-EvilHunter (FreeDurok)"
+      source: community
+      image: ghcr.io/freedurok/openrelik-worker-amcache-evilhunter:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-amcache-evilhunter"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-entropy
-#      image: ghcr.io/openrelik/openrelik-worker-entropy:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-entropy"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-chopchopgo
+      enabled: false
+      description: "Sigma-based Linux/macOS log analysis via ChopChopGo (julianghill)"
+      source: community
+      image: ghcr.io/julianghill/openrelik-worker-chopchopgo:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-chopchopgo"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-exif
-#      image: ghcr.io/openrelik/openrelik-worker-exif:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-exif"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-clamav
+      enabled: false
+      description: "Scans files with ClamAV antivirus (dig-sec)"
+      source: community
+      image: ghcr.io/dig-sec/openrelik-worker-clamav:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-clamav"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-grep
-#      image: ghcr.io/openrelik/openrelik-worker-grep:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-grep"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-dissect-ncsc-nl
+      enabled: false
+      description: "Runs Dissect with the NCSC-NL plugin set (julianghill)"
+      source: community
+      image: ghcr.io/julianghill/openrelik-worker-dissect-ncsc-nl:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-dissect-ncsc-nl"
+      env: {}
+      resources: {}
 
+    - name: openrelik-worker-dissect-timesketch
+      enabled: false
+      description: "Parses Velociraptor data with Dissect and uploads to Timesketch (julianghill)"
+      source: community
+      image: ghcr.io/julianghill/openrelik-worker-dissect-timesketch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-dissect-timesketch"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-os-creds
-#      image: ghcr.io/openrelik/openrelik-worker-os-creds:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-os-creds"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-elasticsearch
+      enabled: false
+      description: "Exports processed results into an Elasticsearch index (dig-sec)"
+      source: community
+      image: ghcr.io/dig-sec/openrelik-worker-elasticsearch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-elasticsearch"
+      env: {}
+      resources: {}
 
-#    - name: openrelik-worker-yara
-#      image: ghcr.io/openrelik/openrelik-worker-yara:latest
-#      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-yara"
-#      env: {}
-#      resources: {}
+    - name: openrelik-worker-evtxecmd
+      enabled: false
+      description: "Parses Windows .evtx event log files with EvtxECmd (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-evtxecmd:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-evtxecmd"
+      env: {}
+      resources: {}
 
-# Hshr Configuration
-hashr:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/hashr/release/hashr
-    pullPolicy: IfNotPresent
-    tag: v1.8.2
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.5"
+    # Image name collapses "eztools-execution" -> "ezexecution" (39dfir-bsg).
+    - name: openrelik-worker-ezexecution
+      enabled: false
+      description: "EZ Tools execution artifact parsers (PECmd, AppCompatCache) (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-ezexecution:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-ezexecution"
+      env: {}
+      resources: {}
+
+    # Image name collapses "eztools-filefolder" -> "ezfilefolder" (39dfir-bsg).
+    - name: openrelik-worker-ezfilefolder
+      enabled: false
+      description: "EZ Tools file/folder artifact parsers (LECmd, JLECmd, SBECmd) (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-ezfilefolder:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-ezfilefolder"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-eztools
+      enabled: false
+      description: "Combined Eric Zimmerman tools bundle (openrelik-contrib)"
+      source: community
+      image: ghcr.io/openrelik-contrib/openrelik-worker-eztools:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-eztools"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-ghidra
+      enabled: false
+      description: "Reverse engineering analysis using Ghidra (dig-sec)"
+      source: community
+      image: ghcr.io/dig-sec/openrelik-worker-ghidra:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-ghidra"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-hayabusa
+      enabled: false
+      description: "Windows event log fast forensics and threat hunting (openrelik-contrib)"
+      source: community
+      image: ghcr.io/openrelik-contrib/openrelik-worker-hayabusa:latest
+      command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-hayabusa"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-hindsight
+      enabled: false
+      description: "Chrome/Chromium browser forensic analysis via Hindsight (AbdullahAlzeid)"
+      source: community
+      image: ghcr.io/abdullahalzeid/openrelik-worker-hindsight:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-hindsight"
+      env: {}
+      resources: {}
+
+    # Upstream image path per worker README; verify if the image name changes.
+    - name: openrelik-worker-ip-extractor
+      enabled: false
+      description: "Extracts IPv4/IPv6 addresses from EVTX and Linux/text logs (julianghill)"
+      source: community
+      image: ghcr.io/openrelik/openrelik-worker-ip-extractor:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-ip-extractor"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-kstrike
+      enabled: false
+      description: "Parses Windows Server User Access Logging (UAL) files (kev365)"
+      source: community
+      image: ghcr.io/kev365/openrelik-worker-kstrike:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-kstrike"
+      env: {}
+      resources: {}
+
+    # Image name collapses "kusto-ingest" -> "kustoingest" (39dfir-bsg).
+    - name: openrelik-worker-kustoingest
+      enabled: false
+      description: "Ingests processed data into Azure Data Explorer / Kusto (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-kustoingest:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-kustoingest"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-mftecmd
+      enabled: false
+      description: "Parses the Windows Master File Table with MFTECmd (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-mftecmd:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-mftecmd"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-opensearch
+      enabled: false
+      description: "Exports processed results into an OpenSearch index (kev365)"
+      source: community
+      image: ghcr.io/kev365/openrelik-worker-opensearch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-opensearch"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-recmd
+      enabled: false
+      description: "Windows Registry analysis using RECmd (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-recmd:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-recmd"
+      env: {}
+      resources: {}
+
+    # Image repo is named "openrelik-worker-sftp" (PeterSufliarsky); keep
+    # catalog name aligned with the image.
+    - name: openrelik-worker-sftp
+      enabled: false
+      description: "Uploads processed files to an SFTP server (PeterSufliarsky)"
+      source: community
+      image: ghcr.io/petersufliarsky/openrelik-worker-sftp:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-sftp"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-thor-lite
+      enabled: false
+      description: "IOC and YARA scanning with Thor Lite (NextronSystems)"
+      source: community
+      image: ghcr.io/nextronsystems/openrelik-worker-thor-lite:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-thor-lite"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-thor2timesketch
+      enabled: false
+      description: "Converts Thor Lite output to Timesketch-compatible CSV (julianghill)"
+      source: community
+      image: ghcr.io/julianghill/openrelik-worker-thor2timesketch:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-thor2timesketch"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-txtfiletocsv
+      enabled: false
+      description: "Converts arbitrary text output to CSV format (39dfir-bsg)"
+      source: community
+      image: ghcr.io/39dfir-bsg/openrelik-worker-txtfiletocsv:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-txtfiletocsv"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-volatility
+      enabled: false
+      description: "Runs Volatility 3 plugins on memory dumps (tomchop)"
+      source: community
+      image: ghcr.io/tomchop/openrelik-worker-volatility:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-volatility"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-yara-scan
+      enabled: false
+      description: "Alternative YARA scanner with Yeti TIP support (tomchop)"
+      source: community
+      image: ghcr.io/tomchop/openrelik-worker-yara-scan:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-yara-scan"
+      env: {}
+      resources: {}
+
+    - name: openrelik-worker-zircolite
+      enabled: false
+      description: "Sigma-based detection against EVTX/JSON logs via Zircolite (julianghill)"
+      source: community
+      image: ghcr.io/julianghill/openrelik-worker-zircolite:latest
+      command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-zircolite"
+      env: {}
+      resources: {}
+
+# HashR Configuration
+# Image tags managed entirely by the upstream chart.
 
 # Yeti Configuration
+# Image tags managed entirely by the upstream chart. We only override
+# persistence to reuse the shared `osdfirvolume` PVC so enabling Yeti does
+# not provision a separate volume.
 yeti:
   persistence:
     enabled: true
     existingPVC: osdfirvolume
-  frontend:
-    image:
-      repository: yetiplatform/yeti-frontend
-      pullPolicy: IfNotPresent
-      tag: 2.4.2
-  api:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: IfNotPresent
-      tag: 2.4.2
-    resources:
-      limits: {}
-      requests: {}
-  tasks:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: IfNotPresent
-      tag: 2.4.2
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.4-alpine"
-  arangodb:
-    image:
-      repository: arangodb
-      pullPolicy: IfNotPresent
-      tag: "3.12.5"

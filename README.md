@@ -1,12 +1,12 @@
 
-![Version](https://img.shields.io/badge/version-20251120-orange) 
+![Version](https://img.shields.io/badge/version-20260419-orange)
 ![GitHub forks](https://img.shields.io/github/forks/kev365/OSDFIR-Lab?style=social) 
 ![GitHub stars](https://img.shields.io/github/stars/kev365/OSDFIR-Lab?style=social) 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 # OSDFIR Lab
 
-**Version:** 20251120
+**Version:** 20260419
 
 A test lab environment for deploying Open Source Digital Forensics and Incident Response (OSDFIR) tools in a Minikube environment with integrated AI capabilities using Docker Desktop.
 
@@ -62,6 +62,17 @@ osdfir-lab/
 - Disk: 40GB
 - Kubernetes version: stable
 
+## Installation
+
+Clone (or fork) the repository — `main` tracks the latest tested state. There are no tagged releases; pull the latest `main` and redeploy when you want updates.
+
+```bash
+git clone https://github.com/kev365/OSDFIR-Lab.git
+cd OSDFIR-Lab
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for notable changes.
+
 ## Quick Start
 
 ### One-Command Deployment
@@ -80,23 +91,35 @@ This automatically handles:
 
 ### Access Your Lab
 
+Default login for every tool: **`admin` / `admin`** (static lab credentials — see Disclaimer).
+
 ```powershell
 # Check status
 ./scripts/manage-osdfir-lab.ps1 status
 
-# Get login credentials
+# Show login credentials
 ./scripts/manage-osdfir-lab.ps1 creds
 
+# Manage OpenRelik workers (enable/disable individual workers)
+./scripts/manage-openrelik-workers.ps1 list
+./scripts/manage-openrelik-workers.ps1 enable plaso
+
 # Access services at:
-# - Timesketch: http://localhost:5000
-# - OpenRelik: http://localhost:8711
-# - OpenRelik API: http://localhost:8710
+# - Timesketch:         http://localhost:5000
+# - OpenRelik:          http://localhost:8711
+# - OpenRelik API:      http://localhost:8710
+# - Yeti:               http://localhost:9000
+# - OpenSearch Dashboards: via Timesketch at /opensearch
 ```
 
 ### Cleanup
 
 ```powershell
-./scripts/manage-osdfir-lab.ps1 teardown-lab
+# Clean shutdown, preserves AI models and data for a fast redeploy:
+./scripts/manage-osdfir-lab.ps1 shutdown-lab
+
+# Nuclear option - wipes the Minikube cluster, AI models, and all data:
+./scripts/manage-osdfir-lab.ps1 destroy-lab
 ```
 
 ## Components
@@ -115,12 +138,14 @@ This automatically handles:
 - **Helm** - Package management (pulls upstream `osdfir-infrastructure` chart)
 - **Docker Desktop** - Container runtime
 
-### Component Versions (20251120 baseline)
+### Component Versions
 
-- `osdfir-infrastructure` Helm chart: **2.5.6**
-- Timesketch image: **20251114** (nginx `1.25.5-alpine-slim`, OpenSearch `3.1.0`, Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
-- OpenRelik core services: **0.6.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.4.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.5.0`)
-- Ollama model: **smollm:latest**
+- `osdfir-infrastructure` Helm chart: **2.8.6** (auto-bumped by [.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
+- **Timesketch, OpenSearch (+ Dashboards), OpenRelik core + workers, Yeti, HashR, Prometheus, Redis, Postgres, nginx**: all tags come from the upstream chart. The values.yaml in this repo does not pin any of them, so a chart bump rolls every component forward at once.
+- Ollama image: **latest** (pinned via `terraform/ollama.tf`)
+- Ollama model: `qwen2.5:0.5b` (configurable via `terraform/variables.tf`)
+
+The weekly chart-version workflow opens an auto-merging PR when an upstream chart update is available and appends the bump to [CHANGELOG.md](CHANGELOG.md). See [docs/updating_osdfir_lab.md](docs/updating_osdfir_lab.md) for what's automatic vs manual and how to override a chart-pinned image if needed.
 
 ## 🚧 Work in Progress
 
@@ -139,25 +164,43 @@ This automatically handles:
 
 ## Management
 
-The unified management script handles all operations:
+Two scripts, one responsibility each.
 
 ```powershell
+# All day-to-day operations:
 ./scripts/manage-osdfir-lab.ps1 [action]
 
-# Key actions:
-deploy            # Full deployment
-status            # Check everything
-start/stop        # Service access
-creds             # Login credentials
-ollama            # AI model status
-teardown-lab-all  # Complete cleanup
+# Key actions: deploy, status, start/stop, creds, logs, ollama,
+# shutdown-lab (clean), destroy-lab (nuclear), mcp-setup
+./scripts/manage-osdfir-lab.ps1 help         # full list + descriptions
 ```
 
-For manual control or troubleshooting, see [commands.md](commands.md).
+```powershell
+# OpenRelik worker toggles (47 workers, 2 enabled by default):
+./scripts/manage-openrelik-workers.ps1 list
+./scripts/manage-openrelik-workers.ps1 enable plaso
+./scripts/manage-openrelik-workers.ps1 disable hayabusa
+```
+
+You can also toggle workers during a deploy:
+
+```powershell
+./scripts/manage-osdfir-lab.ps1 deploy -Enable "plaso,yara" -Disable "strings"
+```
+
+### Keeping the chart version current
+
+A weekly GitHub Action ([.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
+checks the upstream `osdfir-infrastructure` chart and opens an auto-merging
+PR when a new version is available. The PR edits `terraform/variables.tf`,
+`README.md`, and appends a line under `## [Unreleased]` in
+[CHANGELOG.md](CHANGELOG.md). You just pull `main` and redeploy.
+
+Requires **"Allow auto-merge"** enabled in repo Settings -> General.
 
 ## Useful Resources
 
-- **[Updating the Lab](updating_osdfir_lab.md)** - Instructions for updating the lab components.
+- **[Updating the Lab](docs/updating_osdfir_lab.md)** - How versions flow through the lab: what's automated, what's manual, and the full update/verification checklist.
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
 ## Troubleshooting Tips
@@ -179,7 +222,7 @@ For manual control or troubleshooting, see [commands.md](commands.md).
 - **Documentation**: Update docs and create comprehensive how-to guides
 - **Deployment**: Improve deployment process and error handling
 - **Pod Management**: Enhance methods to add/remove/modify pods
-- **Integration**: Complete Yeti and HashR integration setup
+- **Integration**: Verify Yeti and HashR post-deploy credential sharing with Timesketch
 - **External LLMs**: Determine settings for using LLMs outside of the pods
 - **OpenSearch Management**: Establish process for backing up/upgrading/scaling OpenSearch
 

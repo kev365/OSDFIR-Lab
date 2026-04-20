@@ -1,6 +1,6 @@
 # Data source to read the Timesketch secret
 data "kubernetes_secret" "timesketch" {
-  count = var.deploy_mcp_server ? 1 : 0
+  count = var.deploy_timesketch_mcp ? 1 : 0
   metadata {
     name      = "osdfir-lab-timesketch-secret"
     namespace = kubernetes_namespace.osdfir.metadata[0].name
@@ -9,7 +9,7 @@ data "kubernetes_secret" "timesketch" {
 
 # Timesketch MCP Server deployment
 resource "kubernetes_deployment" "timesketch_mcp_server" {
-  count = var.deploy_mcp_server ? 1 : 0
+  count = var.deploy_timesketch_mcp ? 1 : 0
   metadata {
     name      = "timesketch-mcp-server"
     namespace = kubernetes_namespace.osdfir.metadata[0].name
@@ -37,7 +37,7 @@ resource "kubernetes_deployment" "timesketch_mcp_server" {
       spec {
         container {
           
-          image = "ghcr.io/${var.github_repository}/timesketch-mcp-server:latest"
+          image = "ghcr.io/${split("/", var.github_repository)[0]}/timesketch-mcp-server:latest"
           name  = "timesketch-mcp-server"
           image_pull_policy = "Always"  # or "IfNotPresent" if you prefer
           command = ["uv", "run", "python", "src/main.py", "--mcp-host", "0.0.0.0", "--mcp-port", "8081"]
@@ -98,7 +98,7 @@ resource "kubernetes_deployment" "timesketch_mcp_server" {
 
 # Service for the MCP Server
 resource "kubernetes_service" "timesketch_mcp_server" {
-  count = var.deploy_mcp_server ? 1 : 0
+  count = var.deploy_timesketch_mcp ? 1 : 0
   metadata {
     name      = "timesketch-mcp-server"
     namespace = kubernetes_namespace.osdfir.metadata[0].name

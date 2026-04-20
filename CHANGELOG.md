@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to a `YYYYMMDD` versioning scheme.
 
+Automated entries prepended by the `check-chart-version` workflow go under `## [Unreleased]`.
+Promote them to a dated section when cutting a known-good state.
+
+## [Unreleased]
+
+### Changed
+- Drop all image/tag overrides from `configs/osdfir-lab-values.yaml`. Timesketch, OpenSearch (+ Dashboards), OpenRelik core/workers, Yeti, HashR, Prometheus, Redis, Postgres, and nginx all now use the tags pinned by the upstream chart. A chart version bump carries every component forward at once. Worker pinned versions (analyzer-config, plaso, timesketch, extraction) switched from `:0.x.y` to `:latest` for the same reason. To actually see the OpenSearch Dashboard deployed, set `timesketch.opensearch.selfSigned: true` and `timesketch.opensearch.dashboard.ingress: true` in values.yaml.
+
+## [20260419] - 2026-04-19
+
+### Added
+- Weekly GitHub Action (`.github/workflows/check-chart-version.yml`) that checks upstream
+  `osdfir-infrastructure` and opens an auto-merging PR when a new chart version is available;
+  the PR also appends an entry to this changelog.
+- New OpenRelik community workers in the catalog (all disabled by default):
+  `amcache-evilhunter`, `hindsight`, `ip-extractor`.
+- `enable-all` / `disable-all` actions in `scripts/manage-openrelik-workers.ps1` with
+  a confirmation prompt that warns about cluster load.
+- Post-deploy step that calls `tsctl add_user -u admin -p admin` so Timesketch UI login
+  is a predictable `admin / admin` across tear-down/redeploy cycles.
+
+### Changed
+- Bumped `osdfir-infrastructure` Helm chart **2.8.4 → 2.8.6**.
+- OpenSearch and OpenSearch Dashboards images pinned to the rolling `3` tag (latest 3.x,
+  will not move to 4.x).
+- Enabled the OpenSearch Dashboards ingress via Timesketch at `/opensearch`.
+- Simplified credentials: every tool login is now static `admin / admin`. Random
+  backend passwords removed; test-lab context only (see README disclaimer).
+- MCP server image path flattened from `ghcr.io/<owner>/<repo>/timesketch-mcp-server`
+  to `ghcr.io/<owner>/timesketch-mcp-server`. Old GHCR packages were deleted manually.
+- OpenRelik worker catalog defaults: only `strings` and `grep` enabled; all others off.
+  Enable per-worker with `manage-openrelik-workers.ps1 enable <name>`.
+- Deploy script output now prints service URLs, static admin creds, and a pointer to
+  `manage-openrelik-workers.ps1` on completion.
+- README: new Installation section (clone `main`; no tagged releases), refreshed version
+  baseline, documented the auto-update workflow.
+
+### Removed
+- All `random_password` resources from `terraform/secrets.tf` and the `random` provider
+  from `terraform/main.tf`.
+- "No-image" / build-from-source community worker entries from the catalog.
+
+## [20260319] - 2026-03-19
+
+### Changed
+- Bumped Timesketch to image tag **20260311** (from 20251114) — adds Plaso event filters, starred-events-to-forensic-report LLM feature.
+- Bumped OpenRelik core components (UI, server, mediator, metrics) to **0.7.0** (from 0.6.0) — adds ADK integration, workflow engine, SSE streaming.
+- Bumped `openrelik-worker-plaso` to **0.5.0** (from 0.4.0) and `openrelik-worker-extraction` to **0.6.0** (from 0.5.0).
+- Bumped Prometheus to **v3.10.0** (from v3.0.1).
+- Added "Changing the LLM model" quick-reference to `docs/updating_osdfir_lab.md`.
+- Updated version baseline documentation in `README.md` and `docs/updating_osdfir_lab.md`; updated project version badge to **20260319**.
+
+## [20260318] - 2026-03-18
+
+### Added
+- Enabled **HashR** (`v1.8.2`) for hash verification and analysis.
+- Enabled **Yeti** (`2.5.0`) threat intelligence platform with ArangoDB `3.11.8` and Redis `7.4.2-alpine`.
+- Yeti port forwarding (`http://localhost:9000`) and credential retrieval in `manage-osdfir-lab.ps1`.
+- Configured Timesketch integration with HashR (database address) and Yeti (API endpoint).
+
+### Changed
+- Upgraded to `osdfir-infrastructure` Helm chart **2.8.4** (from 2.5.6).
+- Updated Yeti images to `2.5.0`, ArangoDB to `3.11.8`, Redis to `7.4.2-alpine`.
+- Updated HashR PostgreSQL to `17.2-alpine`.
+- Updated version baseline documentation in `README.md` and `docs/updating_osdfir_lab.md`; updated project version badge to **20260318**.
+- Fixed `Hshr` typo in `osdfir-lab-values.yaml` comment.
+
 ## [20251120] - 2025-11-21
 
 ### Added
