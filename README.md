@@ -140,17 +140,12 @@ Default login for every tool: **`admin` / `admin`** (static lab credentials — 
 
 ### Component Versions
 
-- `osdfir-infrastructure` Helm chart: **2.8.6**
-- Timesketch image: **20260311** (nginx `1.25.5-alpine-slim`, OpenSearch `3` (rolling 3.x), Redis `7.4.2-alpine`, Postgres `17.5-alpine`)
-- OpenSearch Dashboards: **3** (rolling 3.x, exposed at `/opensearch` via the Timesketch host)
-- OpenRelik core services: **0.7.0** (workers pinned to analyzer-config `0.2.0`, plaso `0.5.0`, timesketch `0.3.0`, hayabusa `0.3.0`, extraction `0.6.0`)
-- Prometheus (OpenRelik): **v3.10.0**
-- Yeti: **2.5.0** (Redis `7.4.2-alpine`, ArangoDB `3.11.8`)
-- HashR: **v1.8.2** (Postgres `17.2-alpine`)
+- `osdfir-infrastructure` Helm chart: **2.8.6** (auto-bumped by [.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
+- **Timesketch, OpenSearch (+ Dashboards), OpenRelik core + workers, Yeti, HashR, Prometheus, Redis, Postgres, nginx**: all tags come from the upstream chart. The values.yaml in this repo does not pin any of them, so a chart bump rolls every component forward at once.
 - Ollama image: **latest** (pinned via `terraform/ollama.tf`)
 - Ollama model: `qwen2.5:0.5b` (configurable via `terraform/variables.tf`)
 
-OpenSearch images use the rolling `3` tag to auto-pick up the latest 3.x build on pod restart. They will not automatically move to 4.x. The `osdfir-infrastructure` chart version is bumped via a weekly GitHub Action (`.github/workflows/check-chart-version.yml`) that opens an auto-merging PR when an upstream chart update is available; that PR also appends an entry to [CHANGELOG.md](CHANGELOG.md).
+The weekly chart-version workflow opens an auto-merging PR when an upstream chart update is available and appends the bump to [CHANGELOG.md](CHANGELOG.md). See [docs/updating_osdfir_lab.md](docs/updating_osdfir_lab.md) for what's automatic vs manual and how to override a chart-pinned image if needed.
 
 ## 🚧 Work in Progress
 

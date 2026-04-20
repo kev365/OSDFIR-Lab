@@ -62,94 +62,31 @@ networkPolicy:
   enabled: true
 
 # Timesketch Configuration
+# Image tags for timesketch, nginx, opensearch (+ dashboard), redis, and
+# postgres all come from the upstream osdfir-infrastructure chart. We only
+# override lab-specific config here (custom tarball, user creation, no OIDC)
+# so a chart bump carries everything else along automatically.
+#
+# OpenSearch Dashboards: chart default enables it but gates deployment on
+# `opensearch.selfSigned: true`. To actually run the dashboard, override both
+# `opensearch.selfSigned: true` and `opensearch.dashboard.ingress: true` here
+# and redeploy. selfSigned enables the OpenSearch Security Plugin + self-signed
+# TLS, which changes how Timesketch connects to OpenSearch - test after enabling.
 timesketch:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/timesketch/timesketch
-    pullPolicy: IfNotPresent
-    tag: "20260311"
   config:
     override: true
     existingConfigMap: osdfir-lab-ts-configs
     createUser: true
     oidc:
       enabled: false
-  frontend:
-    resources:
-      limits: {}
-      requests: {}
-  worker:
-    resources:
-      limits: {}
-      requests: {}
-  nginx:
-    image:
-      repository: nginx
-      tag: "1.25.5-alpine-slim"
   securityContext:
     enabled: true
-  opensearch:
-    image:
-      repository: opensearchproject/opensearch
-      tag: "3"  # Rolling tag for latest 3.x - will not move to 4.x
-    replicas: 1
-    sysctlInit:
-      enabled: true
-    opensearchJavaOpts: "-Xmx512M -Xms512M"
-    # OpenSearch Dashboards is kept disabled for now: setting dashboard.enabled:true
-    # alone does not cause the timesketch subchart to deploy a dashboard Deployment,
-    # but the Timesketch nginx template still references the (non-existent) dashboard
-    # service and crashloops. Revisit when the chart path for enabling the dashboard
-    # is understood. See CHANGELOG entry for 2026-04-19.
-    dashboard:
-      enabled: false
-      ingress: false
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.5-alpine"
 
 # OpenRelik Configuration
+# Image tags for frontend/api/mediator/metrics/redis/postgres/prometheus all
+# come from the upstream chart. We only set the LLM analyzer config and keep
+# our worker catalog below.
 openrelik:
-  frontend:
-    image:
-      repository: ghcr.io/openrelik/openrelik-ui
-      pullPolicy: IfNotPresent
-      tag: "0.7.0"
-  api:
-    image:
-      repository: ghcr.io/openrelik/openrelik-server
-      pullPolicy: IfNotPresent
-      tag: "0.7.0"
-    resources:
-      limits: {}
-      requests: {}
-  mediator:
-    image:
-      repository: ghcr.io/openrelik/openrelik-mediator
-      pullPolicy: IfNotPresent
-      tag: "0.7.0"
-  metrics:
-    image:
-      repository: ghcr.io/openrelik/openrelik-metrics
-      pullPolicy: IfNotPresent
-      tag: "0.7.0"
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.5-alpine"
-  prometheus:
-    image:
-      repository: prom/prometheus
-      tag: "v3.10.0"
-
   config:
     # LLM analyzer configuration (using OpenRelik chart's built-in configmap).
     # The admin/admin UI login is created post-deploy via openrelik-server's
@@ -194,7 +131,7 @@ openrelik:
       enabled: false
       description: "Identifies security issues and misconfigurations in config files"
       source: official
-      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:0.2.0
+      image: ghcr.io/openrelik/openrelik-worker-analyzer-config:latest
       command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-analyzer-config"
       env: {}
       resources: {}
@@ -293,7 +230,7 @@ openrelik:
       enabled: false
       description: "Extracts files from disk images and archives"
       source: official
-      image: ghcr.io/openrelik/openrelik-worker-extraction:0.6.0
+      image: ghcr.io/openrelik/openrelik-worker-extraction:latest
       command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-extraction"
       env: {}
       resources: {}
@@ -358,7 +295,7 @@ openrelik:
       enabled: false
       description: "Creates super timelines from disk images"
       source: official
-      image: ghcr.io/openrelik/openrelik-worker-plaso:0.5.0
+      image: ghcr.io/openrelik/openrelik-worker-plaso:latest
       command: "celery --app=src.app worker --task-events --concurrency=2 --loglevel=INFO -Q openrelik-worker-plaso"
       env: {}
       resources: {}
@@ -377,7 +314,7 @@ openrelik:
       enabled: false
       description: "Exports Plaso and CSV/JSON data to Timesketch"
       source: official
-      image: ghcr.io/openrelik/openrelik-worker-timesketch:0.3.0
+      image: ghcr.io/openrelik/openrelik-worker-timesketch:latest
       command: "celery --app=src.app worker --task-events --concurrency=1 --loglevel=INFO -Q openrelik-worker-timesketch"
       env: {}
       resources: {}
@@ -638,45 +575,13 @@ openrelik:
       resources: {}
 
 # HashR Configuration
-hashr:
-  image:
-    repository: us-docker.pkg.dev/osdfir-registry/hashr/release/hashr
-    pullPolicy: IfNotPresent
-    tag: v1.8.2
-  postgresql:
-    image:
-      repository: postgres
-      tag: "17.2-alpine"
+# Image tags managed entirely by the upstream chart.
 
 # Yeti Configuration
+# Image tags managed entirely by the upstream chart. We only override
+# persistence to reuse the shared `osdfirvolume` PVC so enabling Yeti does
+# not provision a separate volume.
 yeti:
   persistence:
     enabled: true
     existingPVC: osdfirvolume
-  frontend:
-    image:
-      repository: yetiplatform/yeti-frontend
-      pullPolicy: IfNotPresent
-      tag: 2.5.0
-  api:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: IfNotPresent
-      tag: 2.5.0
-    resources:
-      limits: {}
-      requests: {}
-  tasks:
-    image:
-      repository: yetiplatform/yeti
-      pullPolicy: IfNotPresent
-      tag: 2.5.0
-  redis:
-    image:
-      repository: redis
-      tag: "7.4.2-alpine"
-  arangodb:
-    image:
-      repository: arangodb
-      pullPolicy: IfNotPresent
-      tag: "3.11.8"

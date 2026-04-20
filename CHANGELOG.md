@@ -10,6 +10,9 @@ Promote them to a dated section when cutting a known-good state.
 
 ## [Unreleased]
 
+### Changed
+- Drop all image/tag overrides from `configs/osdfir-lab-values.yaml`. Timesketch, OpenSearch (+ Dashboards), OpenRelik core/workers, Yeti, HashR, Prometheus, Redis, Postgres, and nginx all now use the tags pinned by the upstream chart. A chart version bump carries every component forward at once. Worker pinned versions (analyzer-config, plaso, timesketch, extraction) switched from `:0.x.y` to `:latest` for the same reason. To actually see the OpenSearch Dashboard deployed, set `timesketch.opensearch.selfSigned: true` and `timesketch.opensearch.dashboard.ingress: true` in values.yaml.
+
 ## [20260419] - 2026-04-19
 
 ### Added

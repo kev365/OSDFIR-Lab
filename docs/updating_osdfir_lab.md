@@ -11,19 +11,20 @@ usually "pull `main` and redeploy."
 | What | How it updates | Notes |
 | ---- | -------------- | ----- |
 | `osdfir-infrastructure` Helm chart | Weekly GitHub Action (`.github/workflows/check-chart-version.yml`) | Opens an auto-merging PR that bumps `terraform/variables.tf`, `README.md`, and prepends a line under `## [Unreleased]` in `CHANGELOG.md`. Requires "Allow auto-merge" enabled in repo Settings. |
-| OpenSearch + OpenSearch Dashboards | Rolling `3` image tag | Picks up the latest 3.x build on pod restart. Will NOT move to 4.x. |
-| Ollama container | `:latest` image tag with `imagePullPolicy: IfNotPresent` | To force-pull a newer image: `kubectl rollout restart deployment/ollama -n osdfir` (the pull-on-restart behavior comes from the `Always` policy on the Deployment's init-container; see [terraform/ollama.tf](../terraform/ollama.tf)). |
+| **All upstream component images** — Timesketch, OpenSearch, OpenSearch Dashboards, OpenRelik core (frontend / api / mediator / metrics), OpenRelik workers, Yeti, HashR, Prometheus, Redis, Postgres, nginx | Chart-managed | We do NOT override these in `configs/osdfir-lab-values.yaml`. Each chart release pins a coherent set of image tags; a chart bump brings all of them along. |
+| OpenRelik worker images on `:latest` tag | Helm `imagePullPolicy: IfNotPresent` | New tags are picked up on pod restart. Force a refresh with `kubectl rollout restart deployment/osdfir-lab-openrelik-worker-<name> -n osdfir`. |
+| Ollama container | `:latest` image tag | To force-pull a newer image: `kubectl rollout restart deployment/ollama -n osdfir` (see [terraform/ollama.tf](../terraform/ollama.tf)). |
 
-### Manual (pinned)
+### Manual
 
-These live in [configs/osdfir-lab-values.yaml](../configs/osdfir-lab-values.yaml) and require a conscious edit:
+Only a few knobs in [configs/osdfir-lab-values.yaml](../configs/osdfir-lab-values.yaml) require conscious edits:
 
-- **Timesketch image** — `timesketch.image.tag` (e.g. `"20260311"`). Check [timesketch releases](https://github.com/google/timesketch/releases) for a newer dated image.
-- **OpenRelik core services** — `openrelik.{frontend,api,mediator,metrics}.image.tag` (e.g. `"0.7.0"`). One value shared across the four services per release.
-- **OpenRelik worker pinned versions** — several worker entries under `openrelik.workers` pin specific versions (`openrelik-worker-analyzer-config:0.2.0`, `openrelik-worker-plaso:0.5.0`, `openrelik-worker-timesketch:0.3.0`, `openrelik-worker-extraction:0.6.0`). The rest use `:latest` and auto-pick up on rollout.
-- **Yeti / HashR / Prometheus** — rarely touched; image tags live in the same values file.
+- **Our own worker catalog** — the `openrelik.workers` list includes every known worker with an `enabled` flag. Toggle workers via `manage-openrelik-workers.ps1` (or the `deploy -Enable/-Disable` flags); see the [Workers](#workers-the-openrelikworkers-list) section below.
+- **LLM model wiring** — `ai.model.name`, `openrelik.config.analyzers.llm.model`, `LLM_MODEL_NAME` on the `openrelik-worker-llm` entry, and the Timesketch `timesketch.conf` file. See [Changing the LLM model](#changing-the-llm-model).
+- **Enable/disable a whole subchart** — `global.<tool>.enabled: true/false` for Timesketch, OpenRelik, Yeti, HashR, GRR.
+- **Ollama variables** — `terraform/variables.tf` has `deploy_ollama`, `ai_model_name`, `enable_ollama_vulkan` toggles.
 
-After editing any pinned version, redeploy:
+After any manual edit, redeploy:
 
 ```powershell
 ./scripts/manage-osdfir-lab.ps1 deploy
@@ -31,6 +32,22 @@ After editing any pinned version, redeploy:
 
 Terraform picks up the changed values file, runs `helm upgrade`, and Helm
 rolls Deployments forward one at a time.
+
+### If you need to pin or override
+
+If a chart release ships an image you can't use (regression, missing tag in
+your registry, etc.) you can still override by adding a block to
+`osdfir-lab-values.yaml`. For example to pin OpenSearch to a specific tag:
+
+```yaml
+timesketch:
+  opensearch:
+    image:
+      repository: opensearchproject/opensearch
+      tag: "3.1.0"
+```
+
+The chart's structure (`timesketch.opensearch.image.tag`, `openrelik.api.image.tag`, etc.) is documented in the upstream chart's `values.yaml` — run `helm show values osdfir-charts/osdfir-infrastructure --version <ver>` to see every knob.
 
 ## Workers (the openrelik.workers list)
 
