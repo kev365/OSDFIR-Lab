@@ -18,13 +18,14 @@ This repository provides a complete lab setup for OSDFIR tools running on Kubern
 
 ## Project Structure
 
-```
+```text
 osdfir-lab/
-├── backups/                # Project backups created by the update script
-├── configs/                # Custom configuration files (Timesketch, values, etc.)
-├── helm-addons/            # Add-on Helm templates (Ollama, Timesketch LLM config)
-├── scripts/                # Management and utility scripts
-└── terraform/              # IaC: namespace, PVCs, Helm release, toggles
+├── .github/workflows/      # GitHub Actions (MCP image builds, chart auto-update)
+├── configs/                # Helm values (incl. the worker catalog), Timesketch configs, MCP sources
+├── docs/                   # Contributor + maintenance docs
+├── helm-addons/            # Add-on Helm templates (Timesketch LLM config tarball source)
+├── scripts/                # manage-osdfir-lab.ps1, manage-openrelik-workers.ps1
+└── terraform/              # Namespace, PVCs, helm_release, Ollama, MCP server deployments
 ```
 
 ## Prerequisites
@@ -104,12 +105,15 @@ Default login for every tool: **`admin` / `admin`** (static lab credentials — 
 ./scripts/manage-openrelik-workers.ps1 list
 ./scripts/manage-openrelik-workers.ps1 enable plaso
 
-# Access services at:
+# Services that are deployed by default:
 # - Timesketch:         http://localhost:5000
 # - OpenRelik:          http://localhost:8711
 # - OpenRelik API:      http://localhost:8710
-# - Yeti:               http://localhost:9000
-# - OpenSearch Dashboards: via Timesketch at /opensearch
+#
+# Opt-in services (enable via values.yaml, then redeploy):
+# - Yeti:                  http://localhost:9000                 (global.yeti.enabled: true)
+# - HashR:                 backend only, no UI                   (global.hashr.enabled: true)
+# - OpenSearch Dashboards: http://localhost:5000/opensearch      (timesketch.opensearch.selfSigned: true + dashboard.ingress: true)
 ```
 
 ### Cleanup
@@ -151,16 +155,17 @@ The weekly chart-version workflow opens an auto-merging PR when an upstream char
 
 ### AI Integration (Experimental)
 
-- **Ollama Server** - Local AI model hosting (`smollm:latest`). **NOTE: This is intentionally small for this project, feel free to adjust.**
-- **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (Working!)
-- **OpenRelik AI Workers** - AI-powered evidence analysis (In Progress)
-- **Timesketch MCP Server** - Prebuilt via GitHub Actions, deployable via Terraform toggle.
-- **Yeti MCP Server** - in consideration to add
+- **Ollama Server** - Local AI model hosting. Default model is `qwen2.5:0.5b` (intentionally tiny so the lab runs on a laptop). Swap for a bigger model in [terraform/variables.tf](terraform/variables.tf) `ai_model_name` when you have the headroom.
+- **Timesketch LLM Features** - Natural Language to Query (NL2Q) + Event Summarization (working on larger models; small-model responses can time out).
+- **OpenRelik LLM Worker** - enable the `llm` worker in the catalog to route analyzer tasks through Ollama.
+- **Timesketch MCP Server** - prebuilt via GitHub Actions, deployable via Terraform toggle (`deploy_timesketch_mcp`).
+- **OpenRelik MCP Server** - uses upstream image, deployable via Terraform toggle (`deploy_openrelik_mcp`).
+- **Yeti MCP Server** - prebuilt via GitHub Actions, deployable via Terraform toggle (`deploy_yeti_mcp`).
 
-**Current Status:** 
-- Basic integration working, expanding AI capabilities across tools.
-- The model will be slow and may time out. However the purpose was deploy with something of reasonable size that is functional.
-- A larger model will be needed for better results and performance.
+**Current Status:**
+
+- Basic integration working; extended prompt testing runs via `./scripts/manage-osdfir-lab.ps1 ollama`.
+- The default model is small and may time out on more complex prompts. Point Ollama at a larger model (or an external LLM) for better results.
 
 ## Management
 
@@ -204,15 +209,18 @@ Requires **"Allow auto-merge"** enabled in repo Settings -> General.
 - **[Official OSDFIR Documentation](https://osdfir.org/)**
 
 ## Troubleshooting Tips
-- When re-deploying, with the DFIQ previously enabled, if you get this message "No question found with this ID", try closing and re-opening the browser.
-- Eventually, Terraform my timeout waiting on the pods to all start up, use command `kubectl get pods -n osdfir` to check status. Terraform timing out does not mean the deployment failed, simply that Terraform stopped waiting.
-- After initial deployment, if the Timesketch AI features warn that a provider is needed, you may need to wait and reload the browser to see if the settings will work.
-- On a first deployment the management script automatically extends Helm’s timeout and will periodically remind you that you can run `kubectl get deploy -n osdfir` in another terminal—expect a longer wait while images download and the Ollama model is pulled.
-- For more serious testing, connect to a stronger LLM
 
-## Known Issues / Troubleshooting Tips
-- Still some issues coming up with partial re-deployments/installs, mostly with secrets.
-- LLM features not fully functional in this lab, with the default deployment several features work, but may timeout.
+- When re-deploying after a DFIQ flip, if the UI says "No question found with this ID", close and re-open the browser.
+- Terraform may time out waiting for pods to start on slow machines. That does not mean the deploy failed — check `kubectl get pods -n osdfir` or `./scripts/manage-osdfir-lab.ps1 status`.
+- If Timesketch's AI features warn that a provider is needed right after deploy, wait a minute for the Ollama init-container to finish the model pull, then reload the browser.
+- First deployment downloads images + the Ollama model (several GB). The management script extends Helm's timeout automatically and prints periodic progress reminders.
+- `./scripts/manage-osdfir-lab.ps1 logs` shows any problem pods without spamming healthy pod output; `logs -All` shows every pod.
+- The Minikube tunnel job occasionally stops after OS sleep / Docker restart. `./scripts/manage-osdfir-lab.ps1 start` re-establishes it.
+- For more serious testing, point Ollama at a larger model or an external LLM endpoint.
+
+## Known Issues
+
+- LLM responses on the default small model (`qwen2.5:0.5b`) can time out on longer prompts. Swap in a bigger model or an external provider for reliable results.
 
 ## To-Do List
 
@@ -228,13 +236,15 @@ Requires **"Allow auto-merge"** enabled in repo Settings -> General.
 
 ## Contributing
 
-This is a personal lab project, though suggestions and improvements are welcome! 
+This is a personal lab project, though suggestions and improvements are welcome!
 
-Otherwise, contribute to source projects!
-- https://github.com/google/osdfir-infrastructure
-- https://github.com/google/timesketch
-- https://github.com/openrelik
-- https://github.com/timesketch/timesketch-mcp-server
+Otherwise, contribute to the upstream source projects:
+
+- <https://github.com/google/osdfir-infrastructure>
+- <https://github.com/google/timesketch>
+- <https://github.com/openrelik>
+- <https://github.com/timesketch/timesketch-mcp-server>
+- <https://github.com/yeti-platform/yeti-mcp>
 
 ## Disclaimer
 
