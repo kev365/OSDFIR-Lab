@@ -1062,14 +1062,21 @@ function Set-TimesketchAdmin {
 }
 
 function Get-DeployedUIs {
-    # Returns the subset of main UI services that are actually deployed in the
-    # cluster right now. Used by the deploy final output and Show-Credentials
-    # so disabled tools (e.g. Yeti, HashR) don't appear in login prompts.
+    # Returns the subset of UI services that are actually deployed in the
+    # cluster right now. Used by the deploy final output and Show-Credentials.
+    #
+    # NoCreds=true entries appear in service-URL listings but are filtered
+    # out of the creds view because they don't use admin/admin (e.g. the
+    # OpenSearch Dashboard inherits OpenSearch's own auth).
     $candidates = @(
-        [PSCustomObject]@{ Name = "Timesketch";    Service = "$ReleaseName-timesketch";        Url = "http://localhost:5000" }
-        [PSCustomObject]@{ Name = "OpenRelik";     Service = "$ReleaseName-openrelik-nginx";   Url = "http://localhost:8711" }
-        [PSCustomObject]@{ Name = "OpenRelik API"; Service = "$ReleaseName-openrelik-nginx";   Url = "http://localhost:8710" }
-        [PSCustomObject]@{ Name = "Yeti";          Service = "$ReleaseName-yeti";              Url = "http://localhost:9000" }
+        [PSCustomObject]@{ Name = "Timesketch";           Service = "$ReleaseName-timesketch";             Url = "http://localhost:5000";             NoCreds = $false }
+        [PSCustomObject]@{ Name = "OpenRelik";            Service = "$ReleaseName-openrelik-nginx";        Url = "http://localhost:8711";             NoCreds = $false }
+        [PSCustomObject]@{ Name = "OpenRelik API";        Service = "$ReleaseName-openrelik-nginx";        Url = "http://localhost:8710";             NoCreds = $false }
+        [PSCustomObject]@{ Name = "Yeti";                 Service = "$ReleaseName-yeti";                   Url = "http://localhost:9000";             NoCreds = $false }
+        # OpenSearch Dashboard is served through Timesketch's nginx at /opensearch
+        # when opensearch.dashboard.ingress is true. The dashboard Deployment
+        # (and its own Service) only exist when opensearch.selfSigned is true.
+        [PSCustomObject]@{ Name = "OpenSearch Dashboard"; Service = "$ReleaseName-opensearch-dashboard";   Url = "http://localhost:5000/opensearch";  NoCreds = $true }
     )
     $available = @()
     foreach ($c in $candidates) {
@@ -1100,8 +1107,10 @@ function Show-Credentials {
     if (-not (Test-KubectlAccess)) { return }
 
     $deployed = Get-DeployedUIs
-    # Skip OpenRelik API in creds view (same login as the UI, not a separate endpoint)
-    $deployed = $deployed | Where-Object { $_.Name -ne "OpenRelik API" }
+    # Skip:
+    #  - OpenRelik API (same login as the UI, not a separate endpoint)
+    #  - Anything NoCreds (e.g. OpenSearch Dashboard inherits OpenSearch's own auth)
+    $deployed = $deployed | Where-Object { $_.Name -ne "OpenRelik API" -and -not $_.NoCreds }
 
     if ($Service -ne "all") {
         $deployed = $deployed | Where-Object { $_.Name -match "^$Service$" -or $_.Name -match "^$Service\b" -or $_.Name.ToLower().StartsWith($Service.ToLower()) }
