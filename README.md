@@ -144,7 +144,7 @@ Default login for every tool: **`admin` / `admin`** (static lab credentials — 
 
 ### Component Versions
 
-- `osdfir-infrastructure` Helm chart: **2.8.6** (auto-bumped by [.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
+- `osdfir-infrastructure` Helm chart: **2.8.8** (auto-bumped by [.github/workflows/check-chart-version.yml](.github/workflows/check-chart-version.yml))
 - **Timesketch, OpenSearch (+ Dashboards), OpenRelik core + workers, Yeti, HashR, Prometheus, Redis, Postgres, nginx**: all tags come from the upstream chart. The values.yaml in this repo does not pin any of them, so a chart bump rolls every component forward at once.
 - Ollama image: **latest** (pinned via `terraform/ollama.tf`)
 - Ollama model: `qwen2.5:0.5b` (configurable via `terraform/variables.tf`)
