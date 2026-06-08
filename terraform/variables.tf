@@ -4,7 +4,7 @@
 variable "osdfir_chart_version" {
   description = "Version of the osdfir-infrastructure Helm chart to deploy"
   type        = string
-  default     = "2.8.9"  # Only use the numerical part of the version
+  default     = "2.9.0"  # Only use the numerical part of the version
 }
 
 
