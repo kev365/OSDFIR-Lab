@@ -11,6 +11,9 @@ Promote them to a dated section when cutting a known-good state.
 ## [Unreleased]
 
 ### Changed
+- Bumped `osdfir-infrastructure` chart **2.9.2 → 2.9.3** (automated). See upstream: https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-2.9.3
+
+### Changed
 - Bumped `osdfir-infrastructure` chart **2.9.0 → 2.9.2** (automated). See upstream: https://github.com/google/osdfir-infrastructure/releases/tag/osdfir-infrastructure-2.9.2
 
 ### Changed
